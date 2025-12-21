@@ -1,0 +1,48 @@
+services:
+  dokploy-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dokploy
+      POSTGRES_PASSWORD: dokploy_secret
+      POSTGRES_DB: dokploy
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dokploy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dokploy-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  dokploy:
+    image: dokploy/dokploy:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://dokploy:dokploy_secret@dokploy-postgres:5432/dokploy
+      - REDIS_URL=redis://dokploy-redis:6379
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dokploy_data:/etc/dokploy
+    depends_on:
+      dokploy-postgres:
+        condition: service_healthy
+      dokploy-redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  dokploy_data:
