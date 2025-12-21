@@ -42,6 +42,17 @@ services:
       dokploy-redis:
         condition: service_healthy
 
+  relaykit:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+    depends_on:
+      dokploy:
+        condition: service_started
+
 volumes:
   postgres_data:
   redis_data:
