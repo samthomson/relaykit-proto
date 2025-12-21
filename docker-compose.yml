@@ -43,12 +43,20 @@ services:
         condition: service_healthy
 
   relaykit:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     restart: unless-stopped
     ports:
       - "4000:4000"
+      - "5173:5173"
     environment:
       - PORT=4000
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+      - /app/backend/node_modules
+      - /app/frontend/node_modules
     depends_on:
       dokploy:
         condition: service_started

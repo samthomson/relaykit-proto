@@ -1,0 +1,23 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install root dependencies (concurrently)
+COPY app/package.json app/yarn.lock* ./
+RUN yarn install
+
+# Install backend dependencies
+COPY app/backend/package.json app/backend/yarn.lock* ./backend/
+RUN cd backend && yarn install
+
+# Install frontend dependencies
+COPY app/frontend/package.json app/frontend/yarn.lock* ./frontend/
+RUN cd frontend && yarn install
+
+# Copy everything
+COPY app .
+
+EXPOSE 4000 5173
+
+CMD ["yarn", "dev"]
+

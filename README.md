@@ -37,20 +37,25 @@ Browser → RelayKit App → Dokploy API
 
 ```
 relaykit-proto/
-├── frontend/         (React + tRPC client)
-├── backend/          (Node.js + tRPC server)
-├── presets/          (service docker-compose templates)
-│   └── stirfry-relay/
-│       ├── docker-compose.yml
-│       └── metadata.json
-└── docker-compose.yml (Dokploy + RelayKit)
+├── docker-compose.yml
+├── Dockerfile.dev
+├── start-dev.sh
+├── README.md
+└── app/
+    ├── frontend/     (React + tRPC client)
+    ├── backend/      (Node.js + tRPC server)
+    └── presets/      (service docker-compose templates)
+        └── stirfry-relay/
+            ├── docker-compose.yml
+            └── metadata.json
 ```
 
 ## Development vs Production
 
-**Dev:** Run frontend and backend separately for fast iteration
-- Frontend: `yarn dev` in frontend/ (Vite dev server)
-- Backend: `yarn dev` in backend/ (tsx watch)
+**Dev:** Everything runs in one Docker container
+- `docker-compose up --build`
+- Frontend: http://localhost:5173
+- Backend: http://localhost:4000
 
 **Prod:** One container, backend serves built frontend
 - Build frontend → static files
@@ -65,7 +70,7 @@ relaykit-proto/
 - We deploy by POSTing docker-compose configs to Dokploy
 
 **Presets:**
-- Each service has a folder in `/presets/`
+- Each service has a folder in `/app/presets/`
 - `docker-compose.yml` = actual service configuration
 - `metadata.json` = service info (name, description, required config fields)
 - Backend does template substitution (domain, env vars) before deploying
