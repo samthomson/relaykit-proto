@@ -2,37 +2,158 @@ import { useState } from 'react';
 import { trpc } from './trpc';
 
 function App() {
-  const [number, setNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dokployStatus, setDokployStatus] = useState<any>(null);
+  const [projects, setProjects] = useState<any>(null);
+  const [setupResult, setSetupResult] = useState<any>(null);
+  
+  const [apiKey, setApiKey] = useState('');
 
-  const handleClick = async () => {
+  const checkDokploy = async () => {
     setLoading(true);
     try {
-      const result = await trpc.getRandomNumber.query();
-      setNumber(result);
-    } catch (error) {
-      console.error('Error fetching random number:', error);
+      const result = await trpc.checkDokploy.query();
+      setDokployStatus(result);
+    } catch (error: any) {
+      console.error('Error checking Dokploy:', error);
+      setDokployStatus({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const listProjects = async () => {
+    setLoading(true);
+    try {
+      const result = await trpc.listProjects.query();
+      setProjects(result);
+    } catch (error: any) {
+      console.error('Error listing projects:', error);
+      setProjects({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setSetupResult(null);
+    
+    try {
+      const result = await trpc.saveApiKey.mutate({ apiKey });
+      setSetupResult(result);
+    } catch (error: any) {
+      console.error('Setup error:', error);
+      setSetupResult({ error: error.message });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: '2rem' }}>
+    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
       <h1>RelayKit</h1>
-      <p>Frontend running</p>
+      <p>Nostr service deployment platform</p>
       
-      <div style={{ marginTop: '2rem' }}>
-        <button onClick={handleClick} disabled={loading}>
-          {loading ? 'Loading...' : 'Get Random Number'}
-        </button>
-        
-        {number !== null && (
-          <p style={{ marginTop: '1rem', fontSize: '2rem' }}>
-            Random Number: <strong>{number}</strong>
+      <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#f9f9f9', borderRadius: '8px' }}>
+        <h2>Setup RelayKit</h2>
+        <div style={{ color: '#666', fontSize: '14px', marginBottom: '1rem' }}>
+          <p style={{ marginBottom: '0.5rem' }}>
+            <strong>Step 1:</strong> Create your Dokploy account at{' '}
+            <a href="http://localhost:3000" target="_blank" style={{ color: '#007bff' }}>
+              http://localhost:3000
+            </a>
           </p>
+          <p style={{ marginBottom: '0.5rem' }}>
+            <strong>Step 2:</strong> Generate an API key in Dokploy at{' '}
+            <a href="http://localhost:3000/dashboard/settings/profile" target="_blank" style={{ color: '#007bff' }}>
+              Settings → Profile
+            </a>
+          </p>
+          <p>
+            <strong>Step 3:</strong> Paste the API key below:
+          </p>
+        </div>
+        
+        <form onSubmit={handleSetup} style={{ marginTop: '1rem' }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+              Dokploy API Key:
+              <input
+                type="text"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                required
+                placeholder="paste-your-api-key-here"
+                style={{ 
+                  display: 'block',
+                  width: '100%',
+                  padding: '0.5rem',
+                  marginTop: '0.25rem',
+                  borderRadius: '4px',
+                  border: '1px solid #ddd',
+                  fontFamily: 'monospace'
+                }}
+              />
+            </label>
+          </div>
+          
+          <button 
+            type="submit" 
+            disabled={loading}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: loading ? '#ccc' : '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            {loading ? 'Saving...' : 'Save API Key'}
+          </button>
+        </form>
+        
+        {setupResult && (
+          <div style={{ 
+            marginTop: '1rem', 
+            padding: '1rem', 
+            background: setupResult.error ? '#ffebee' : '#e8f5e9',
+            borderRadius: '4px'
+          }}>
+            <strong>{setupResult.error ? 'Error:' : 'Success!'}</strong>
+            <pre style={{ marginTop: '0.5rem', fontSize: '12px' }}>
+              {JSON.stringify(setupResult, null, 2)}
+            </pre>
+          </div>
         )}
       </div>
+
+      <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <button onClick={checkDokploy} disabled={loading}>
+          {loading ? 'Checking...' : 'Check Dokploy Connection'}
+        </button>
+
+        <button onClick={listProjects} disabled={loading}>
+          {loading ? 'Loading...' : 'List Dokploy Projects'}
+        </button>
+      </div>
+
+      {dokployStatus && (
+        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f0f0', borderRadius: '4px' }}>
+          <strong>Dokploy Status:</strong>
+          <pre style={{ fontSize: '12px' }}>{JSON.stringify(dokployStatus, null, 2)}</pre>
+        </div>
+      )}
+
+      {projects && (
+        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f0f0', borderRadius: '4px' }}>
+          <strong>Dokploy Projects:</strong>
+          <pre style={{ fontSize: '12px' }}>{JSON.stringify(projects, null, 2)}</pre>
+        </div>
+      )}
     </div>
   );
 }

@@ -52,10 +52,16 @@ relaykit-proto/
 
 ## Development vs Production
 
-**Dev:** Everything runs in one Docker container
+**Dev:** Everything runs in Docker
 - `docker-compose up --build`
-- Frontend: http://localhost:5173
-- Backend: http://localhost:4000
+- Dokploy: http://localhost:3000
+- RelayKit Frontend: http://localhost:5173
+- RelayKit Backend: http://localhost:4000
+
+**First-time setup:**
+1. Create Dokploy account at http://localhost:3000
+2. Generate API key at http://localhost:3000/dashboard/settings/profile
+3. Paste API key in RelayKit at http://localhost:5173
 
 **Prod:** One container, backend serves built frontend
 - Build frontend → static files
