@@ -1,0 +1,29 @@
+services:
+  strfry:
+    image: ghcr.io/hoytech/strfry:latest
+    restart: unless-stopped
+    volumes:
+      - strfry_data:/app/strfry-db
+      - ./strfry:/config:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["cp /config/strfry.conf /app/strfry.conf && /app/strfry relay"]
+    expose:
+      - "7777"
+    networks: [dokploy-network]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.strfry.rule=Host(`{{RELAY_HOST}}`)"
+      - "traefik.http.routers.strfry.entrypoints=websecure"
+      - "traefik.http.routers.strfry.tls=true"
+      - "traefik.http.routers.strfry.service=strfry"
+      - "traefik.http.services.strfry.loadbalancer.server.port=7777"
+      - "traefik.http.middlewares.strfry-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.routers.strfry.middlewares=strfry-headers"
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  strfry_data:
+

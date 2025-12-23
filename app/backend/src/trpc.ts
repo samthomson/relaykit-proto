@@ -9,6 +9,7 @@ export const publicProcedure = t.procedure
 
 const DOKPLOY_URL = 'http://dokploy:3000'
 const CONFIG_PATH = path.join('/app', '.dokploy-key')
+const DEFAULT_PROJECT_NAME = 'relaykit.ungrouped'
 
 const getApiKey = async (): Promise<string> => {
   try {
@@ -39,7 +40,7 @@ const dokployFetch = async (endpoint: string, options: RequestInit = {}) => {
   const text = await response.text()
   
   if (!response.ok) {
-    throw new Error(`Dokploy API error (${response.status}): ${text.substring(0, 200)}`)
+    throw new Error(`Dokploy API error (${response.status}): ${text.substring(0, 500)}`)
   }
 
   try {
@@ -50,6 +51,30 @@ const dokployFetch = async (endpoint: string, options: RequestInit = {}) => {
 }
 
 export const appRouter = router({
+  // List available service presets
+  listPresets: publicProcedure.query(async () => {
+    const presetsDir = path.join('/app', 'presets')
+    const presets = []
+    
+    try {
+      const dirs = await fs.readdir(presetsDir)
+      
+      for (const dir of dirs) {
+        const metadataPath = path.join(presetsDir, dir, 'metadata.json')
+        try {
+          const metadata = await fs.readFile(metadataPath, 'utf-8')
+          presets.push(JSON.parse(metadata))
+        } catch (e) {
+          // Skip directories without metadata.json
+        }
+      }
+    } catch (error) {
+      console.error('Error reading presets:', error)
+    }
+    
+    return presets
+  }),
+
   // List all projects in Dokploy
   listProjects: publicProcedure.query(async () => {
     return await dokployFetch('/api/project.all')
@@ -111,6 +136,95 @@ export const appRouter = router({
         }
       } catch (error: any) {
         throw new Error(`Failed to save API key: ${error.message}`)
+      }
+    }),
+
+  // Deploy a service
+  deployService: publicProcedure
+    .input((val: unknown) => {
+      if (
+        typeof val === 'object' &&
+        val !== null &&
+        'presetId' in val &&
+        'config' in val &&
+        typeof (val as any).presetId === 'string' &&
+        typeof (val as any).config === 'object'
+      ) {
+        return val as { presetId: string; config: Record<string, string> }
+      }
+      throw new Error('Invalid input')
+    })
+    .mutation(async ({ input }) => {
+      try {
+        // 1. Read the preset files
+        const presetDir = path.join('/app', 'presets', input.presetId)
+        const composeContent = await fs.readFile(
+          path.join(presetDir, 'docker-compose.yml'),
+          'utf-8'
+        )
+
+        // 2. Substitute config variables
+        let finalCompose = composeContent
+        for (const [key, value] of Object.entries(input.config)) {
+          finalCompose = finalCompose.replace(new RegExp(`{{${key}}}`, 'g'), value)
+        }
+
+        // 3. Get or create default project
+        const projectsResponse = await dokployFetch('/api/project.all')
+        const projects = projectsResponse || []
+        let project = projects.find?.((p: any) => p.name === DEFAULT_PROJECT_NAME)
+        
+        if (!project) {
+          const createResult = await dokployFetch('/api/project.create', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: DEFAULT_PROJECT_NAME,
+              description: 'Ungrouped services deployed via RelayKit'
+            })
+          })
+          project = createResult
+        }
+
+        // 4. Create compose service
+        const composeName = `${input.presetId}-${Date.now()}`
+        
+        // Get the environmentId from the project's environments array
+        const environmentId = project.environments?.[0]?.environmentId
+        
+        if (!environmentId) {
+          throw new Error(`No environment found in project`)
+        }
+
+        const createComposeResponse = await dokployFetch('/api/compose.create', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: composeName,
+            description: `${input.presetId} relay deployed by RelayKit`,
+            appName: input.presetId,
+            composeType: 'docker-compose',
+            sourceType: 'raw',
+            composeFile: finalCompose,
+            environmentId: environmentId,
+            serverId: null // Use default server
+          })
+        })
+        const createCompose = createComposeResponse
+
+        // 5. Deploy it
+        await dokployFetch('/api/compose.deploy', {
+          method: 'POST',
+          body: JSON.stringify({
+            composeId: createCompose.composeId || createCompose.id
+          })
+        })
+
+        return {
+          success: true,
+          composeId: createCompose.composeId,
+          message: 'Service deployed successfully!'
+        }
+      } catch (error: any) {
+        throw new Error(`Failed to deploy service: ${error.message}`)
       }
     }),
 })

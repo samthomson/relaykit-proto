@@ -85,3 +85,12 @@ relaykit-proto/
 - Option 1: Store deployment metadata in our own Postgres
 - Option 2: Just query Dokploy API for deployed services (simpler)
 - Decision: Start with option 2, add Postgres only if needed
+
+
+## todo
+
+- [ ] tidy up creation process/code
+- [ ] tidy ui, for how we present projects
+- [ ] change default project group for all projects to go into
+- [ ] let user specify a project/group for projects to go into
+- [ ] get it running the service properly

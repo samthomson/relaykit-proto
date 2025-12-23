@@ -1,0 +1,16 @@
+{
+  "id": "stirfry",
+  "name": "Strfry Relay",
+  "description": "A high-performance Nostr relay written in C++",
+  "version": "1.0.0",
+  "requiredConfig": [
+    {
+      "id": "RELAY_HOST",
+      "name": "Relay Domain",
+      "type": "string",
+      "required": true,
+      "description": "The domain name for your Nostr relay (e.g., relay.example.com)"
+    }
+  ]
+}
+
