@@ -46,6 +46,9 @@ function App() {
         config: deployConfig,
       });
       setDeployResult(result);
+      
+      // Reload projects list after successful deployment
+      await listProjects();
     } catch (error: any) {
       console.error('Deploy error:', error);
       setDeployResult({ error: error.message });
