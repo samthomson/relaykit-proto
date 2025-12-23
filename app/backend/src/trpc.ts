@@ -1,4 +1,5 @@
 import { initTRPC } from '@trpc/server'
+import { z } from 'zod'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -103,17 +104,9 @@ export const appRouter = router({
 
   // Save Dokploy API key
   saveApiKey: publicProcedure
-    .input((val: unknown) => {
-      if (
-        typeof val === 'object' &&
-        val !== null &&
-        'apiKey' in val &&
-        typeof (val as any).apiKey === 'string'
-      ) {
-        return val as { apiKey: string }
-      }
-      throw new Error('Invalid input')
-    })
+    .input(z.object({
+      apiKey: z.string()
+    }))
     .mutation(async ({ input }) => {
       // Validate API key by calling Dokploy API
       try {
@@ -141,19 +134,10 @@ export const appRouter = router({
 
   // Deploy a service
   deployService: publicProcedure
-    .input((val: unknown) => {
-      if (
-        typeof val === 'object' &&
-        val !== null &&
-        'presetId' in val &&
-        'config' in val &&
-        typeof (val as any).presetId === 'string' &&
-        typeof (val as any).config === 'object'
-      ) {
-        return val as { presetId: string; config: Record<string, string> }
-      }
-      throw new Error('Invalid input')
-    })
+    .input(z.object({
+      presetId: z.string(),
+      config: z.record(z.string())
+    }))
     .mutation(async ({ input }) => {
       try {
         // 1. Read the preset files
