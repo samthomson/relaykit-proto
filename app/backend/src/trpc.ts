@@ -84,13 +84,39 @@ export const appRouter = router({
     for (const project of projects) {
       for (const environment of project.environments || []) {
         for (const compose of environment.compose || []) {
+          // Parse env string to extract RELAY_HOST
+          const envVars: Record<string, string> = {}
+          if (compose.env) {
+            compose.env.split('\n').forEach((line: string) => {
+              const [key, ...values] = line.split('=')
+              if (key && values.length > 0) {
+                envVars[key.trim()] = values.join('=').trim()
+              }
+            })
+          }
+          
+          // Get preset metadata
+          const presetId = compose.description
+          if (!presetId) {
+            throw new Error(`Service ${compose.name} has no preset ID`)
+          }
+          
+          const presetsDir = path.join('/app', 'presets')
+          const metadataPath = path.join(presetsDir, presetId, 'metadata.json')
+          const metadata = await fs.readFile(metadataPath, 'utf-8')
+          const presetData = JSON.parse(metadata)
+          
+          if (!presetData.label) {
+            throw new Error(`Preset ${presetId} has no label in metadata`)
+          }
+          
           services.push({
             composeId: compose.composeId,
             name: compose.name,
-            description: compose.description,
+            serviceType: presetData.label,
             status: compose.composeStatus,
             createdAt: compose.createdAt,
-            env: compose.env,
+            hostname: envVars.RELAY_HOST || 'No hostname configured',
             projectName: project.name,
             environmentName: environment.name,
           })
@@ -262,7 +288,7 @@ export const appRouter = router({
           method: 'POST',
           body: JSON.stringify({
             name: composeName,
-            description: `${input.presetId} relay deployed by RelayKit`,
+            description: input.presetId, // Store preset ID here
             appName: input.presetId,
             composeType: 'docker-compose',
             sourceType: 'raw',

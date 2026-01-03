@@ -23,6 +23,11 @@ function App() {
     }
   }, [toast]);
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard!', 'success');
+  };
+
   // Load presets and check Dokploy status on mount
   useEffect(() => {
     loadPresets();
@@ -69,8 +74,8 @@ function App() {
   const handleStopService = async (composeId: string) => {
     try {
       await trpc.stopService.mutate({ composeId });
-      showToast('Service stopped', 'success');
       await loadServices();
+      showToast('Service stopped', 'success');
     } catch (error: any) {
       showToast(`Failed to stop service: ${error.message}`, 'error');
     }
@@ -79,8 +84,8 @@ function App() {
   const handleStartService = async (composeId: string) => {
     try {
       await trpc.startService.mutate({ composeId });
-      showToast('Service started', 'success');
       await loadServices();
+      showToast('Service started', 'success');
     } catch (error: any) {
       showToast(`Failed to start service: ${error.message}`, 'error');
     }
@@ -305,8 +310,18 @@ function App() {
                   alignItems: 'center'
                 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                       <h3 style={{ margin: 0, fontSize: '16px' }}>{service.name}</h3>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        background: '#e3f2fd',
+                        color: '#1565c0'
+                      }}>
+                        {service.serviceType}
+                      </span>
                       <span style={{
                         padding: '0.25rem 0.75rem',
                         borderRadius: '12px',
@@ -320,11 +335,34 @@ function App() {
                         {service.status}
                       </span>
                     </div>
-                    <p style={{ margin: '0.25rem 0 0 0', color: '#666', fontSize: '14px' }}>
-                      {service.description}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.25rem 0 0 0' }}>
+                      <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>
+                        🌐 {service.hostname}
+                      </p>
+                      <button
+                        onClick={() => copyToClipboard(service.hostname)}
+                        style={{
+                          padding: '0.25rem 0.5rem',
+                          background: '#f0f0f0',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                        title="Copy hostname"
+                      >
+                        📋
+                      </button>
+                    </div>
                     <p style={{ margin: '0.25rem 0 0 0', color: '#999', fontSize: '12px' }}>
-                      Created: {new Date(service.createdAt).toLocaleString()}
+                      Created: {new Date(service.createdAt).toLocaleString(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                      })}
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
