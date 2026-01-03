@@ -4,12 +4,19 @@ services:
     restart: unless-stopped
     volumes:
       - strfry_data:/app/strfry-db
-      - ./strfry:/config:ro
     entrypoint: ["/bin/sh", "-c"]
-    command: ["cp /config/strfry.conf /app/strfry.conf && /app/strfry relay"]
+    command:
+      - |
+        cat > /app/strfry.conf <<EOF
+        db = "/app/strfry-db"
+        relay {
+          bind = "0.0.0.0"
+          port = 7777
+        }
+        EOF
+        /app/strfry relay
     expose:
       - "7777"
-    networks: [dokploy-network]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.strfry.rule=Host(`${RELAY_HOST}`)"
@@ -19,10 +26,6 @@ services:
       - "traefik.http.services.strfry.loadbalancer.server.port=7777"
       - "traefik.http.middlewares.strfry-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.routers.strfry.middlewares=strfry-headers"
-
-networks:
-  dokploy-network:
-    external: true
 
 volumes:
   strfry_data:
