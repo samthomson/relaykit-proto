@@ -4,21 +4,35 @@ import { trpc } from './trpc';
 function App() {
   const [loading, setLoading] = useState(false);
   const [dokployStatus, setDokployStatus] = useState<any>(null);
-  const [projects, setProjects] = useState<any>(null);
   const [setupResult, setSetupResult] = useState<any>(null);
   const [presets, setPresets] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<any>(null);
   const [deployConfig, setDeployConfig] = useState<Record<string, string>>({});
   const [deployResult, setDeployResult] = useState<any>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
   const [apiKey, setApiKey] = useState('');
+
+  // Auto-hide toast after 5 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Load presets and check Dokploy status on mount
   useEffect(() => {
     loadPresets();
     checkDokploy();
+    loadServices();
   }, []);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+  };
 
   const loadPresets = async () => {
     try {
@@ -26,6 +40,49 @@ function App() {
       setPresets(result);
     } catch (error) {
       console.error('Error loading presets:', error);
+    }
+  };
+
+  const loadServices = async () => {
+    try {
+      const result = await trpc.listServices.query();
+      setServices(result);
+    } catch (error) {
+      console.error('Error loading services:', error);
+    }
+  };
+
+  const handleDeleteService = async (composeId: string, serviceName: string) => {
+    if (!confirm(`Are you sure you want to delete ${serviceName}?`)) {
+      return;
+    }
+
+    try {
+      await trpc.deleteService.mutate({ composeId });
+      showToast('Service deleted successfully', 'success');
+      await loadServices();
+    } catch (error: any) {
+      showToast(`Failed to delete service: ${error.message}`, 'error');
+    }
+  };
+
+  const handleStopService = async (composeId: string) => {
+    try {
+      await trpc.stopService.mutate({ composeId });
+      showToast('Service stopped', 'success');
+      await loadServices();
+    } catch (error: any) {
+      showToast(`Failed to stop service: ${error.message}`, 'error');
+    }
+  };
+
+  const handleStartService = async (composeId: string) => {
+    try {
+      await trpc.startService.mutate({ composeId });
+      showToast('Service started', 'success');
+      await loadServices();
+    } catch (error: any) {
+      showToast(`Failed to start service: ${error.message}`, 'error');
     }
   };
 
@@ -48,8 +105,8 @@ function App() {
       });
       setDeployResult(result);
       
-      // Reload projects list after successful deployment
-      await listProjects();
+      // Reload services list after successful deployment
+      await loadServices();
     } catch (error: any) {
       console.error('Deploy error:', error);
       setDeployResult({ error: error.message });
@@ -66,19 +123,6 @@ function App() {
     } catch (error: any) {
       console.error('Error checking Dokploy:', error);
       setDokployStatus({ error: error.message });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const listProjects = async () => {
-    setLoading(true);
-    try {
-      const result = await trpc.listProjects.query();
-      setProjects(result);
-    } catch (error: any) {
-      console.error('Error listing projects:', error);
-      setProjects({ error: error.message });
     } finally {
       setLoading(false);
     }
@@ -102,6 +146,24 @@ function App() {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          top: '2rem',
+          right: '2rem',
+          padding: '1rem 1.5rem',
+          background: toast.type === 'success' ? '#28a745' : '#dc3545',
+          color: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          zIndex: 9999,
+          maxWidth: '400px',
+          wordWrap: 'break-word'
+        }}>
+          <strong>{toast.type === 'success' ? '✓' : '✗'}</strong> {toast.message}
+        </div>
+      )}
+
       <h1>RelayKit</h1>
       <p>Nostr service deployment platform</p>
       
@@ -204,29 +266,120 @@ function App() {
         </div>
       )}
 
-      <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <button onClick={checkDokploy} disabled={loading}>
-          {loading ? 'Checking...' : 'Check Dokploy Connection'}
+      <div style={{ marginTop: '3rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h2 style={{ margin: 0 }}>Deployed Services</h2>
+          <button
+            onClick={loadServices}
+            disabled={loading}
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            {loading ? 'Refreshing...' : 'Refresh'}
         </button>
+        </div>
 
-        <button onClick={listProjects} disabled={loading}>
-          {loading ? 'Loading...' : 'List Dokploy Projects'}
-        </button>
+        {services.length === 0 ? (
+          <p style={{ color: '#666', fontStyle: 'italic' }}>No services deployed yet. Deploy your first service below!</p>
+        ) : (
+          <div style={{ border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden' }}>
+            {services.map((service, index) => (
+              <div
+                key={service.composeId}
+                style={{
+                  borderBottom: index < services.length - 1 ? '1px solid #ddd' : 'none',
+                  background: 'white'
+                }}
+              >
+                <div style={{
+                  padding: '1rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                      <h3 style={{ margin: 0, fontSize: '16px' }}>{service.name}</h3>
+                      <span style={{
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        background: service.status === 'running' ? '#d4edda' : 
+                                   service.status === 'error' ? '#f8d7da' : '#fff3cd',
+                        color: service.status === 'running' ? '#155724' :
+                               service.status === 'error' ? '#721c24' : '#856404'
+                      }}>
+                        {service.status}
+                      </span>
+                    </div>
+                    <p style={{ margin: '0.25rem 0 0 0', color: '#666', fontSize: '14px' }}>
+                      {service.description}
+                    </p>
+                    <p style={{ margin: '0.25rem 0 0 0', color: '#999', fontSize: '12px' }}>
+                      Created: {new Date(service.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {service.status === 'running' ? (
+                      <button
+                        onClick={() => handleStopService(service.composeId)}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          background: '#ffc107',
+                          color: '#000',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Stop
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleStartService(service.composeId)}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          background: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Start
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteService(service.composeId, service.name)}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {dokployStatus && (
-        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f0f0', borderRadius: '4px' }}>
-          <strong>Dokploy Status:</strong>
-          <pre style={{ fontSize: '12px' }}>{JSON.stringify(dokployStatus, null, 2)}</pre>
-        </div>
-      )}
-
-      {projects && (
-        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0f0f0', borderRadius: '4px' }}>
-          <strong>Dokploy Projects:</strong>
-          <pre style={{ fontSize: '12px' }}>{JSON.stringify(projects, null, 2)}</pre>
-        </div>
-      )}
 
       <div style={{ marginTop: '3rem' }}>
         <h2>Deploy a Service</h2>

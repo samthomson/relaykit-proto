@@ -76,10 +76,87 @@ export const appRouter = router({
     return presets
   }),
 
-  // List all projects in Dokploy
-  listProjects: publicProcedure.query(async () => {
-    return await dokployFetch('/api/project.all')
+  // List deployed services
+  listServices: publicProcedure.query(async () => {
+    const projects = await dokployFetch('/api/project.all')
+    const services = []
+    
+    for (const project of projects) {
+      for (const environment of project.environments || []) {
+        for (const compose of environment.compose || []) {
+          services.push({
+            composeId: compose.composeId,
+            name: compose.name,
+            description: compose.description,
+            status: compose.composeStatus,
+            createdAt: compose.createdAt,
+            env: compose.env,
+            projectName: project.name,
+            environmentName: environment.name,
+          })
+        }
+      }
+    }
+    
+    return services
   }),
+
+  // Delete a service
+  deleteService: publicProcedure
+    .input(z.object({
+      composeId: z.string()
+    }))
+    .mutation(async ({ input }) => {
+      await dokployFetch('/api/compose.delete', {
+        method: 'POST',
+        body: JSON.stringify({
+          composeId: input.composeId
+        })
+      })
+      
+      return {
+        success: true,
+        message: 'Service deleted successfully'
+      }
+    }),
+
+  // Stop a service
+  stopService: publicProcedure
+    .input(z.object({
+      composeId: z.string()
+    }))
+    .mutation(async ({ input }) => {
+      await dokployFetch('/api/compose.stop', {
+        method: 'POST',
+        body: JSON.stringify({
+          composeId: input.composeId
+        })
+      })
+      
+      return {
+        success: true,
+        message: 'Service stopped'
+      }
+    }),
+
+  // Start a service
+  startService: publicProcedure
+    .input(z.object({
+      composeId: z.string()
+    }))
+    .mutation(async ({ input }) => {
+      await dokployFetch('/api/compose.start', {
+        method: 'POST',
+        body: JSON.stringify({
+          composeId: input.composeId
+        })
+      })
+      
+      return {
+        success: true,
+        message: 'Service started'
+      }
+    }),
 
   // Check Dokploy connection
   checkDokploy: publicProcedure.query(async () => {
