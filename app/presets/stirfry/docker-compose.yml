@@ -12,7 +12,7 @@ services:
     networks: [dokploy-network]
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.strfry.rule=Host(`{{RELAY_HOST}}`)"
+      - "traefik.http.routers.strfry.rule=Host(`${RELAY_HOST}`)"
       - "traefik.http.routers.strfry.entrypoints=websecure"
       - "traefik.http.routers.strfry.tls=true"
       - "traefik.http.routers.strfry.service=strfry"

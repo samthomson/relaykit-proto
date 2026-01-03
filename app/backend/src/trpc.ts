@@ -136,22 +136,21 @@ export const appRouter = router({
   deployService: publicProcedure
     .input(z.object({
       presetId: z.string(),
-      config: z.record(z.string())
+      config: z.record(z.string(), z.string())
     }))
     .mutation(async ({ input }) => {
       try {
-        // 1. Read the preset files
+        // 1. Read the preset compose file
         const presetDir = path.join('/app', 'presets', input.presetId)
         const composeContent = await fs.readFile(
           path.join(presetDir, 'docker-compose.yml'),
           'utf-8'
         )
 
-        // 2. Substitute config variables
-        let finalCompose = composeContent
-        for (const [key, value] of Object.entries(input.config)) {
-          finalCompose = finalCompose.replace(new RegExp(`{{${key}}}`, 'g'), value)
-        }
+        // 2. Build environment variables string (KEY=VALUE\nKEY=VALUE)
+        const envString = Object.entries(input.config)
+          .map(([key, value]) => `${key}=${value}`)
+          .join('\n')
 
         // 3. Get or create default project
         const projectsResponse = await dokployFetch('/api/project.all')
@@ -166,7 +165,10 @@ export const appRouter = router({
               description: 'Ungrouped services deployed via RelayKit'
             })
           })
-          project = createResult
+          
+          // Fetch the project again to get full data with environments
+          const allProjects = await dokployFetch('/api/project.all')
+          project = allProjects.find?.((p: any) => p.projectId === createResult.projectId)
         }
 
         // 4. Create compose service
@@ -176,7 +178,7 @@ export const appRouter = router({
         const environmentId = project.environments?.[0]?.environmentId
         
         if (!environmentId) {
-          throw new Error(`No environment found in project`)
+          throw new Error(`No environment found in project. Project has: ${JSON.stringify(project)}`)
         }
 
         const createComposeResponse = await dokployFetch('/api/compose.create', {
@@ -187,18 +189,29 @@ export const appRouter = router({
             appName: input.presetId,
             composeType: 'docker-compose',
             sourceType: 'raw',
-            composeFile: finalCompose,
+            composeFile: composeContent,
+            env: envString,
             environmentId: environmentId,
             serverId: null // Use default server
           })
         })
         const createCompose = createComposeResponse
 
+        // 4.5. Update compose with env vars and sourceType (compose.create ignores these)
+        await dokployFetch('/api/compose.update', {
+          method: 'POST',
+          body: JSON.stringify({
+            composeId: createCompose.composeId,
+            env: envString,
+            sourceType: 'raw'
+          })
+        })
+
         // 5. Deploy it
         await dokployFetch('/api/compose.deploy', {
           method: 'POST',
           body: JSON.stringify({
-            composeId: createCompose.composeId || createCompose.id
+            composeId: createCompose.composeId
           })
         })
 

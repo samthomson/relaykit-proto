@@ -59,7 +59,7 @@ relaykit-proto/
 - RelayKit Backend: http://localhost:4000
 
 **First-time setup:**
-1. Create Dokploy account at http://localhost:3000
+1. Create Dokploy account at http://localhost:3000 eg email@address.com/password
 2. Generate API key at http://localhost:3000/dashboard/settings/profile
 3. Paste API key in RelayKit at http://localhost:5173
 
@@ -77,9 +77,10 @@ relaykit-proto/
 
 **Presets:**
 - Each service has a folder in `/app/presets/`
-- `docker-compose.yml` = actual service configuration
+- `docker-compose.yml` = standard Docker Compose file using `${ENV_VAR}` syntax
 - `metadata.json` = service info (name, description, required config fields)
-- Backend does template substitution (domain, env vars) before deploying
+- Backend collects config from user and passes as env vars to Dokploy's API
+- Users can update env vars later without redeploying
 
 **State:**
 - Option 1: Store deployment metadata in our own Postgres
