@@ -90,6 +90,9 @@ relaykit-proto/
 
 ## todo
 
+- [ ] get Traefik working (now: not running in Dokploy container; should: running so 80/443 route to services)
+- [ ] remove debug console.logs in backend
+- [ ] convey real deployment status in UI (not assumed success)
 - [ ] tidy up creation process/code
 - [ ] tidy ui, for how we present projects
 - [ ] change default project group for all projects to go into
