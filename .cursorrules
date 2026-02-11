@@ -1,0 +1,7 @@
+# Relaykit-proto – Cursor rules
+
+- Be concise. Prefer short answers and small edits unless the user asks for detail or docs.
+- No long essays or unnecessary preamble.
+- Stack: Vite/React frontend, Node + tRPC backend, Dokploy for deployment. Presets live under `app/presets/`.
+- Prefer editing existing code over adding new files. Match existing style and patterns.
+- When touching Docker/Dokploy/Traefik, keep the current setup in mind: one shared reverse proxy for the stack, not per-container.
