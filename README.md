@@ -108,7 +108,6 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 
 ## todo
 
-- [ ] remove debug console.logs in backend
 - [ ] multiple relays at once
 - [ ] does the ssl mode select on creation make sense?
 - [ ] convey real deployment status in UI (not assumed success)
