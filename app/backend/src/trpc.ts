@@ -110,8 +110,6 @@ export const appRouter = router({
             throw new Error(`Preset ${presetId} has no label in metadata`)
           }
           
-          console.log(`Service ${compose.name} status from Dokploy:`, compose.composeStatus)
-          
           services.push({
             composeId: compose.composeId,
             name: compose.name,
@@ -387,8 +385,6 @@ export const appRouter = router({
             serviceName: presetData.serviceName
           }
           
-          console.log('Creating domain with payload:', JSON.stringify(domainPayload, null, 2))
-          
           await dokployFetch('/api/domain.create', {
             method: 'POST',
             body: JSON.stringify(domainPayload)
@@ -403,8 +399,6 @@ export const appRouter = router({
           })
         })
         
-        console.log('Deploy result:', JSON.stringify(deployResult, null, 2))
-
         return {
           success: true,
           composeId: createCompose.composeId,
