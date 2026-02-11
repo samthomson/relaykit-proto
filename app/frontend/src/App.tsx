@@ -443,7 +443,7 @@ function App() {
                           ) : (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <span style={{ fontSize: '14px', color: '#666' }}>
-                                🌐 {service.domains[0].host} {service.domains[0].https ? '(HTTPS)' : '(HTTP)'}
+                                🌐 {service.domains[0].host} (HTTPS)
                               </span>
                               <button
                                 onClick={() => copyToClipboard(service.domains[0].host)}
