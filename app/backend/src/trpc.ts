@@ -125,6 +125,7 @@ export const appRouter = router({
       }
     }
     
+    services.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return services
   }),
 
