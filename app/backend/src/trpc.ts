@@ -331,7 +331,13 @@ export const appRouter = router({
         }
 
         // 4. Create compose service
-        const composeName = `${input.presetId}-${Date.now()}`
+        const uniqueSuffix = Date.now()
+        const composeName = `${input.presetId}-${uniqueSuffix}`
+        // Replace {{DEPLOY_SUFFIX}} so each deployment gets its own volumes (preset convention)
+        const composeContentWithUniqueVolumes = composeContent.replace(
+          /\{\{DEPLOY_SUFFIX\}\}/g,
+          String(uniqueSuffix)
+        )
         
         // Get the environmentId from the project's environments array
         const environmentId = project.environments?.[0]?.environmentId
@@ -348,7 +354,7 @@ export const appRouter = router({
             appName: input.presetId,
             composeType: 'docker-compose',
             sourceType: 'raw',
-            composeFile: composeContent,
+            composeFile: composeContentWithUniqueVolumes,
             env: envString,
             environmentId: environmentId,
             serverId: null // Use default server
@@ -393,7 +399,14 @@ export const appRouter = router({
         }
 
         // 5. Deploy it
-        const deployResult = await dokployFetch('/api/compose.deploy', {
+        await dokployFetch('/api/compose.deploy', {
+          method: 'POST',
+          body: JSON.stringify({
+            composeId: createCompose.composeId
+          })
+        })
+        // 6. Start the stack so containers actually run (deploy may only create)
+        await dokployFetch('/api/compose.start', {
           method: 'POST',
           body: JSON.stringify({
             composeId: createCompose.composeId
