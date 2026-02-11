@@ -108,7 +108,6 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 
 ## todo
 
-- [ ] get Traefik working (now: not running in Dokploy container; should: running so 80/443 route to services)
 - [ ] remove debug console.logs in backend
 - [ ] multiple relays at once
 - [ ] does the ssl mode select on creation make sense?
