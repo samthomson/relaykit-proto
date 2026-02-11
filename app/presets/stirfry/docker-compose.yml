@@ -1,11 +1,12 @@
 # Routing is configured via Dokploy's Domains API (domain.create), not Traefik labels in this file.
 # Service must be on dokploy-network so Traefik can reach it.
+# Use {{DEPLOY_SUFFIX}} in volume names so each deployment gets its own volume (replaced at deploy time).
 services:
   strfry:
     image: ghcr.io/hoytech/strfry:latest
     restart: unless-stopped
     volumes:
-      - strfry_data:/app/strfry-db
+      - strfry_data_{{DEPLOY_SUFFIX}}:/app/strfry-db
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -23,7 +24,7 @@ services:
       - dokploy-network
 
 volumes:
-  strfry_data:
+  strfry_data_{{DEPLOY_SUFFIX}}:
 
 networks:
   dokploy-network:
