@@ -99,6 +99,7 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 - Backend collects config from user and passes as env vars to Dokploy's API
 - Users can update env vars later without redeploying
 - For routing: metadata must include `serviceName` (compose service name) and `internalPort`. Certificate type ("No SSL" for local, "Let's Encrypt" for prod) is chosen in the deploy modal and can be edited per service in the UI; editing a domain triggers redeploy.
+- For unique data per instance: use `{{DEPLOY_SUFFIX}}` in volume names in the compose file; the backend replaces it at deploy time so each deployment gets its own volumes.
 
 **State:**
 - Option 1: Store deployment metadata in our own Postgres
@@ -117,3 +118,4 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 - [ ] let user specify a project/group for projects to go into
 - [ ] get it running the service properly
 - [ ] dns record instructions for after adding a domain?
+- [ ] expose volumes to user so they can manage (view/delete/optional: create service from volume)
