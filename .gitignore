@@ -17,6 +17,8 @@ app/.dokploy-key
 dev-certs/
 # Local dev domain list (copy from scripts/dev-domains.example.txt)
 scripts/dev-domains.txt
+# Generated from dev-domains.txt by scripts/gen-dev-certs.sh
+Caddyfile.dev
 
 # OS files
 .DS_Store
