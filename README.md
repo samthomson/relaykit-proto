@@ -22,8 +22,9 @@ Browser → RelayKit App → Dokploy API
 
 **docker-compose.yml runs:**
 - Dokploy + its Postgres/Redis
+- dokploy-traefik (in prod: listens on 80 and 443, routes to services; in dev: no ports, Caddy in front)
+- Caddy (dev only: listens on 80 and 443, terminates HTTPS with mkcert, forwards HTTP to Traefik)
 - RelayKit app (one container: backend serves frontend)
-- RelayKit Postgres (if we need state)
 
 ## How It Works
 
@@ -52,8 +53,10 @@ relaykit-proto/
 
 ## Development vs Production
 
+**Prerequisites (dev):** Docker. For local HTTPS: `brew install mkcert && mkcert -install`, then `./scripts/gen-dev-certs.sh` (creates certs + Caddyfile). Without mkcert/certs, Caddy will fail on 80/443.
+
 **Dev:** Everything runs in Docker
-- `docker-compose up --build`
+- `docker compose up --build`
 - Dokploy: http://localhost:3000
 - RelayKit Frontend: http://localhost:5173
 - RelayKit Backend: http://localhost:4000
@@ -63,17 +66,31 @@ relaykit-proto/
 2. Generate API key at http://localhost:3000/dashboard/settings/profile
 3. Paste API key in RelayKit at http://localhost:5173
 
-**Prod:** One container, backend serves built frontend
-- Build frontend → static files
-- Backend serves static files + tRPC API endpoints
-- One port exposed (e.g., 4000)
+**Local HTTPS (any domain you want):** The cert covers whatever hostnames you list in `scripts/dev-domains.txt` (e.g. relay.local, myrelay.test, reallyrelay.io). Flow when adding a new relay in local dev:
+
+1. Add your chosen domain to `/etc/hosts` (e.g. `127.0.0.1 reallyrelay.io`).
+2. Add that domain to `scripts/dev-domains.txt` (copy from `scripts/dev-domains.example.txt` if you don't have one).
+3. Run `./scripts/gen-dev-certs.sh`. If compose is already running, restart it so Caddy picks up the new cert.
+4. In RelayKit, create the relay and set its domain to that hostname; choose "No SSL" for local.
+
+Then https://your-domain works in the browser and routes to the relay.
+
+**Prod:** `docker compose -f docker-compose.prod.yml up -d`. No Caddy; Traefik on 80/443 with real certs. RelayKit: build frontend, backend serves static + tRPC, one port.
+
 
 ## Key Technical Details
 
 **Dokploy Integration:**
 - Backend calls Dokploy's REST API (need to find API docs)
 - Dokploy runs on `http://dokploy:3000` (accessible via Docker network)
-- We deploy by POSTing docker-compose configs to Dokploy
+
+RelayKit has two domain flows: **create a service (with domain in one go)** and **change a service's domain later**.
+
+| RelayKit action | Dokploy APIs (in order) |
+|-----------------|-------------------------|
+| **List services** | `project.all`; then for each project → each environment → each compose in that environment, we build one list entry. |
+| **Create service** (domain set at creation) | `project.all` or `project.create` → `compose.create` → `compose.update` → `domain.create` → `compose.deploy` |
+| **Change domain** (edit existing service) | `domain.delete` → `domain.create` → `compose.redeploy` |
 
 **Presets:**
 - Each service has a folder in `/app/presets/`
@@ -81,6 +98,7 @@ relaykit-proto/
 - `metadata.json` = service info (name, description, required config fields)
 - Backend collects config from user and passes as env vars to Dokploy's API
 - Users can update env vars later without redeploying
+- For routing: metadata must include `serviceName` (compose service name) and `internalPort`. Certificate type ("No SSL" for local, "Let's Encrypt" for prod) is chosen in the deploy modal and can be edited per service in the UI; editing a domain triggers redeploy.
 
 **State:**
 - Option 1: Store deployment metadata in our own Postgres
@@ -92,9 +110,12 @@ relaykit-proto/
 
 - [ ] get Traefik working (now: not running in Dokploy container; should: running so 80/443 route to services)
 - [ ] remove debug console.logs in backend
+- [ ] multiple relays at once
+- [ ] does the ssl mode select on creation make sense?
 - [ ] convey real deployment status in UI (not assumed success)
 - [ ] tidy up creation process/code
-- [ ] tidy ui, for how we present projects
+- [ ] tidy ui, for how we present projects - and react client structure (componentize)
 - [ ] change default project group for all projects to go into
 - [ ] let user specify a project/group for projects to go into
 - [ ] get it running the service properly
+- [ ] dns record instructions for after adding a domain?

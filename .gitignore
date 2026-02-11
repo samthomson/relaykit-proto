@@ -13,6 +13,11 @@ dist
 .env
 app/.dokploy-key
 
+# Dev TLS (mkcert output)
+dev-certs/
+# Local dev domain list (copy from scripts/dev-domains.example.txt)
+scripts/dev-domains.txt
+
 # OS files
 .DS_Store
 

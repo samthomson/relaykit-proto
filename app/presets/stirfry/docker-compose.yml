@@ -1,3 +1,5 @@
+# Routing is configured via Dokploy's Domains API (domain.create), not Traefik labels in this file.
+# Service must be on dokploy-network so Traefik can reach it.
 services:
   strfry:
     image: ghcr.io/hoytech/strfry:latest
@@ -17,16 +19,13 @@ services:
         /app/strfry relay
     expose:
       - "7777"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.strfry.rule=Host(`${RELAY_HOST}`)"
-      - "traefik.http.routers.strfry.entrypoints=websecure"
-      - "traefik.http.routers.strfry.tls=true"
-      - "traefik.http.routers.strfry.service=strfry"
-      - "traefik.http.services.strfry.loadbalancer.server.port=7777"
-      - "traefik.http.middlewares.strfry-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
-      - "traefik.http.routers.strfry.middlewares=strfry-headers"
+    networks:
+      - dokploy-network
 
 volumes:
   strfry_data:
+
+networks:
+  dokploy-network:
+    external: true
 

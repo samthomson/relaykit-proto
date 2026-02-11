@@ -12,6 +12,9 @@ function App() {
   const [deployConfig, setDeployConfig] = useState<Record<string, string>>({});
   const [deployResult, setDeployResult] = useState<any>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [editingDomain, setEditingDomain] = useState<{ composeId: string, domainId: string, currentHost: string } | null>(null);
+  const [newDomainHost, setNewDomainHost] = useState('');
+  const [newDomainCertType, setNewDomainCertType] = useState('letsencrypt');
   
   const [apiKey, setApiKey] = useState('');
 
@@ -91,9 +94,47 @@ function App() {
     }
   };
 
+  const handleEditDomain = (composeId: string, domain: any) => {
+    setEditingDomain({
+      composeId,
+      domainId: domain.domainId,
+      currentHost: domain.host
+    });
+    setNewDomainHost(domain.host);
+    setNewDomainCertType(domain.certificateType || 'letsencrypt');
+  };
+
+  const handleSaveDomain = async () => {
+    if (!editingDomain) return;
+    
+    try {
+      await trpc.updateServiceDomain.mutate({
+        composeId: editingDomain.composeId,
+        domainId: editingDomain.domainId,
+        newHost: newDomainHost,
+        certificateType: newDomainCertType
+      });
+      
+      setEditingDomain(null);
+      await loadServices();
+      showToast('Domain updated successfully', 'success');
+    } catch (error: any) {
+      showToast(`Failed to update domain: ${error.message}`, 'error');
+    }
+  };
+
   const handleDeployClick = (preset: any) => {
     setSelectedPreset(preset);
-    setDeployConfig({});
+    
+    // Set default values from preset config + cert type (applies to any service with a domain)
+    const defaults: Record<string, string> = { CERTIFICATE_TYPE: 'letsencrypt' }
+    preset.requiredConfig.forEach((field: any) => {
+      if (field.default) {
+        defaults[field.id] = field.default
+      }
+    })
+    
+    setDeployConfig(defaults);
     setDeployResult(null);
     setDeployModalOpen(true);
   };
@@ -104,17 +145,20 @@ function App() {
     setDeployResult(null);
 
     try {
-      const result = await trpc.deployService.mutate({
+      await trpc.deployService.mutate({
         presetId: selectedPreset.id,
         config: deployConfig,
       });
-      setDeployResult(result);
+      
+      showToast('Service deployment started!', 'success');
+      setDeployModalOpen(false);
       
       // Reload services list after successful deployment
       await loadServices();
     } catch (error: any) {
       console.error('Deploy error:', error);
       setDeployResult({ error: error.message });
+      showToast(`Deploy failed: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -335,24 +379,108 @@ function App() {
                         {service.status}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.25rem 0 0 0' }}>
-                      <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>
-                        🌐 {service.hostname}
-                      </p>
-                      <button
-                        onClick={() => copyToClipboard(service.hostname)}
-                        style={{
-                          padding: '0.25rem 0.5rem',
-                          background: '#f0f0f0',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '12px'
-                        }}
-                        title="Copy hostname"
-                      >
-                        📋
-                      </button>
+                    <div style={{ margin: '0.5rem 0 0 0' }}>
+                      {service.domains && service.domains.length > 0 ? (
+                        <div style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#f9f9f9', borderRadius: '4px' }}>
+                          {editingDomain?.domainId === service.domains[0].domainId ? (
+                            <div>
+                              <input
+                                type="text"
+                                value={newDomainHost}
+                                onChange={(e) => setNewDomainHost(e.target.value)}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  marginRight: '0.5rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid #ddd',
+                                  fontSize: '12px'
+                                }}
+                              />
+                              <select
+                                value={newDomainCertType}
+                                onChange={(e) => setNewDomainCertType(e.target.value)}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  marginRight: '0.5rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid #ddd',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                <option value="letsencrypt">Let's Encrypt</option>
+                                <option value="none">No SSL</option>
+                              </select>
+                              <button
+                                onClick={handleSaveDomain}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  marginRight: '0.25rem',
+                                  background: '#28a745',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingDomain(null)}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  background: '#6c757d',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '14px', color: '#666' }}>
+                                🌐 {service.domains[0].host} {service.domains[0].https ? '(HTTPS)' : '(HTTP)'}
+                              </span>
+                              <button
+                                onClick={() => copyToClipboard(service.domains[0].host)}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  background: '#f0f0f0',
+                                  border: '1px solid #ddd',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                                title="Copy domain"
+                              >
+                                📋
+                              </button>
+                              <button
+                                onClick={() => handleEditDomain(service.composeId, service.domains[0])}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  background: '#007bff',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p style={{ margin: 0, color: '#999', fontSize: '12px', fontStyle: 'italic' }}>
+                          No domain configured
+                        </p>
+                      )}
                     </div>
                     <p style={{ margin: '0.25rem 0 0 0', color: '#999', fontSize: '12px' }}>
                       Created: {new Date(service.createdAt).toLocaleString(undefined, {
@@ -493,30 +621,76 @@ function App() {
                 <div key={field.id} style={{ marginBottom: '1rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
                     {field.name}:
-                    <input
-                      type={field.type}
-                      value={deployConfig[field.id] || ''}
-                      onChange={(e) => setDeployConfig({
-                        ...deployConfig,
-                        [field.id]: e.target.value
-                      })}
-                      required={field.required}
-                      placeholder={field.description}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        padding: '0.5rem',
-                        marginTop: '0.25rem',
-                        borderRadius: '4px',
-                        border: '1px solid #ddd'
-                      }}
-                    />
+                    {field.type === 'select' ? (
+                      <select
+                        value={deployConfig[field.id] || field.default || ''}
+                        onChange={(e) => setDeployConfig({
+                          ...deployConfig,
+                          [field.id]: e.target.value
+                        })}
+                        required={field.required}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '0.5rem',
+                          marginTop: '0.25rem',
+                          borderRadius: '4px',
+                          border: '1px solid #ddd'
+                        }}
+                      >
+                        {field.options.map((option: any) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={field.type}
+                        value={deployConfig[field.id] || ''}
+                        onChange={(e) => setDeployConfig({
+                          ...deployConfig,
+                          [field.id]: e.target.value
+                        })}
+                        required={field.required}
+                        placeholder={field.placeholder || field.description}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '0.5rem',
+                          marginTop: '0.25rem',
+                          borderRadius: '4px',
+                          border: '1px solid #ddd'
+                        }}
+                      />
+                    )}
                   </label>
                   {field.description && (
                     <small style={{ color: '#666', fontSize: '12px' }}>{field.description}</small>
                   )}
                 </div>
               ))}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
+                  SSL certificate (for this domain):
+                  <select
+                    value={deployConfig.CERTIFICATE_TYPE || 'letsencrypt'}
+                    onChange={(e) => setDeployConfig({ ...deployConfig, CERTIFICATE_TYPE: e.target.value })}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '0.5rem',
+                      marginTop: '0.25rem',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd'
+                    }}
+                  >
+                    <option value="letsencrypt">Let's Encrypt (Production)</option>
+                    <option value="none">No SSL (Local Development)</option>
+                  </select>
+                </label>
+                <small style={{ color: '#666', fontSize: '12px' }}>How Dokploy/Traefik should handle TLS for this domain.</small>
+              </div>
 
               {deployResult && (
                 <div style={{

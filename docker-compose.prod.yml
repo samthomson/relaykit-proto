@@ -1,4 +1,5 @@
-# Dev: one stack. Caddy on 80/443 (run ./scripts/gen-dev-certs.sh for HTTPS). Traefik behind for routing.
+# Prod: same stack, Traefik on 80/443 (real certs). No Caddy.
+# docker compose -f docker-compose.prod.yml up -d
 services:
   dokploy-postgres:
     image: postgres:16-alpine
@@ -51,6 +52,9 @@ services:
   dokploy-traefik:
     image: traefik:v3.6.7
     restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
     volumes:
       - dokploy_data:/etc/dokploy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -61,20 +65,6 @@ services:
       - default
       - dokploy-network
 
-  caddy:
-    image: caddy:alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./dev-certs:/certs:ro
-      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
-    depends_on:
-      - dokploy-traefik
-    networks:
-      - default
-
   relaykit:
     build:
       context: .
@@ -82,14 +72,10 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
-      - "5173:5173"
     environment:
       - PORT=4000
     volumes:
       - ./app:/app
-      - /app/node_modules
-      - /app/backend/node_modules
-      - /app/frontend/node_modules
     depends_on:
       dokploy:
         condition: service_started

@@ -110,6 +110,8 @@ export const appRouter = router({
             throw new Error(`Preset ${presetId} has no label in metadata`)
           }
           
+          console.log(`Service ${compose.name} status from Dokploy:`, compose.composeStatus)
+          
           services.push({
             composeId: compose.composeId,
             name: compose.name,
@@ -117,6 +119,7 @@ export const appRouter = router({
             status: compose.composeStatus,
             createdAt: compose.createdAt,
             hostname: envVars.RELAY_HOST || 'No hostname configured',
+            domains: compose.domains || [],
             projectName: project.name,
             environmentName: environment.name,
           })
@@ -181,6 +184,60 @@ export const appRouter = router({
       return {
         success: true,
         message: 'Service started'
+      }
+    }),
+
+  // Update service domain
+  updateServiceDomain: publicProcedure
+    .input(z.object({
+      composeId: z.string(),
+      domainId: z.string(),
+      newHost: z.string(),
+      certificateType: z.string()
+    }))
+    .mutation(async ({ input }) => {
+      // Get compose details to fetch preset metadata
+      const compose = await dokployFetch(`/api/compose.one?composeId=${input.composeId}`)
+      const presetId = compose.description
+      
+      const presetsDir = path.join('/app', 'presets')
+      const metadataPath = path.join(presetsDir, presetId, 'metadata.json')
+      const metadata = await fs.readFile(metadataPath, 'utf-8')
+      const presetData = JSON.parse(metadata)
+      
+      // 1. Delete old domain
+      await dokployFetch('/api/domain.delete', {
+        method: 'POST',
+        body: JSON.stringify({
+          domainId: input.domainId
+        })
+      })
+      
+      // 2. Create new domain
+      await dokployFetch('/api/domain.create', {
+        method: 'POST',
+        body: JSON.stringify({
+          composeId: input.composeId,
+          host: input.newHost,
+          https: input.certificateType !== 'none',
+          path: '/',
+          port: presetData.internalPort,
+          certificateType: input.certificateType,
+          serviceName: presetData.serviceName
+        })
+      })
+      
+      // 3. Redeploy to pick up changes
+      await dokployFetch('/api/compose.redeploy', {
+        method: 'POST',
+        body: JSON.stringify({
+          composeId: input.composeId
+        })
+      })
+      
+      return {
+        success: true,
+        message: 'Domain updated and service redeployed'
       }
     }),
 
@@ -310,18 +367,48 @@ export const appRouter = router({
           })
         })
 
+        // 4.6. Read preset metadata for domain config
+        const metadataPath = path.join(presetDir, 'metadata.json')
+        const metadataContent = await fs.readFile(metadataPath, 'utf-8')
+        const presetData = JSON.parse(metadataContent)
+
+        // 4.7. Register the domain for the service
+        const hostname = input.config.RELAY_HOST
+        const certificateType = input.config.CERTIFICATE_TYPE || 'letsencrypt'
+        
+        if (hostname && presetData.serviceName) {
+          const domainPayload = {
+            composeId: createCompose.composeId,
+            host: hostname,
+            https: certificateType !== 'none',
+            path: '/',
+            port: presetData.internalPort,
+            certificateType: certificateType,
+            serviceName: presetData.serviceName
+          }
+          
+          console.log('Creating domain with payload:', JSON.stringify(domainPayload, null, 2))
+          
+          await dokployFetch('/api/domain.create', {
+            method: 'POST',
+            body: JSON.stringify(domainPayload)
+          })
+        }
+
         // 5. Deploy it
-        await dokployFetch('/api/compose.deploy', {
+        const deployResult = await dokployFetch('/api/compose.deploy', {
           method: 'POST',
           body: JSON.stringify({
             composeId: createCompose.composeId
           })
         })
+        
+        console.log('Deploy result:', JSON.stringify(deployResult, null, 2))
 
         return {
           success: true,
           composeId: createCompose.composeId,
-          message: 'Service deployed successfully!'
+          message: 'Service deployment started (may take a moment to become fully running)'
         }
       } catch (error: any) {
         throw new Error(`Failed to deploy service: ${error.message}`)

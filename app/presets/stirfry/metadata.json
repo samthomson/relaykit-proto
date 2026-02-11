@@ -4,13 +4,16 @@
   "label": "Strfry",
   "description": "A high-performance Nostr relay written in C++",
   "version": "1.0.0",
+  "serviceName": "strfry",
+  "internalPort": 7777,
   "requiredConfig": [
     {
       "id": "RELAY_HOST",
       "name": "Relay Domain",
       "type": "string",
       "required": true,
-      "description": "The domain name for your Nostr relay (e.g., relay.example.com)"
+      "description": "The domain name for your Nostr relay (e.g., relay.example.com)",
+      "placeholder": "relay.example.com"
     }
   ]
 }

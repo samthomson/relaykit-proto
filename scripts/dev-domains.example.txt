@@ -1,0 +1,5 @@
+# Dev HTTPS hostnames (one per line). Copy to dev-domains.txt, add your domains, run ./scripts/gen-dev-certs.sh
+# Blank lines and # lines are ignored.
+relay.local
+localhost
+127.0.0.1
