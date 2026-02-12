@@ -118,3 +118,4 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 - [ ] get it running the service properly
 - [ ] dns record instructions for after adding a domain?
 - [ ] expose volumes to user so they can manage (view/delete/optional: create service from volume)
+- [ ] can more things be exposed from stirfry, like whitelist kinds and users (and default blacklist all). and then how to reload to get this config?
