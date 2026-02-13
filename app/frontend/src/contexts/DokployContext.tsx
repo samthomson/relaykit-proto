@@ -16,7 +16,7 @@ export const DokployProvider = ({ children }: { children: React.ReactNode }) => 
   const checkDokploy = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await trpc.checkDokploy.query();
+      const result = await trpc.checkDokploy.query(undefined);
       setDokployStatus(result);
     } catch (error: any) {
       console.error('Error checking Dokploy:', error);
