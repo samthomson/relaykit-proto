@@ -114,7 +114,9 @@ const dokployFetch = async (endpoint: string, options: RequestInit = {}) => {
 }
 
 export const appRouter = router({
-  listPresets: publicProcedure.query(async () => {
+  listPresets: publicProcedure
+    .input(z.void())
+    .query(async () => {
     const presets = []
     try {
       for (const dir of await fs.readdir(PRESETS_DIR)) {
@@ -130,7 +132,9 @@ export const appRouter = router({
     return presets
   }),
 
-  listServices: publicProcedure.query(async () => {
+  listServices: publicProcedure
+    .input(z.void())
+    .query(async () => {
     const projects = await dokployFetch('/api/project.all')
     const services = []
     for (const project of projects) {
@@ -239,7 +243,9 @@ export const appRouter = router({
     }),
 
   // Check Dokploy connection
-  checkDokploy: publicProcedure.query(async () => {
+  checkDokploy: publicProcedure
+    .input(z.void())
+    .query(async () => {
     try {
       await fetch(`${DOKPLOY_URL}/`)
       const hasApiKey = !!(await getApiKey())
