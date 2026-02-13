@@ -109,7 +109,6 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 
 ## todo
 
-- [ ] does the ssl mode select on creation make sense?
 - [ ] convey real deployment status in UI (not assumed success)
 - [ ] tidy up creation process/code
 - [ ] tidy ui, for how we present projects - and react client structure (componentize)
@@ -119,3 +118,4 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 - [ ] dns record instructions for after adding a domain?
 - [ ] expose volumes to user so they can manage (view/delete/optional: create service from volume)
 - [ ] can more things be exposed from stirfry, like whitelist kinds and users (and default blacklist all). and then how to reload to get this config?
+- [ ] new tab link for each relay's url

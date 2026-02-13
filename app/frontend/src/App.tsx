@@ -14,7 +14,6 @@ function App() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [editingDomain, setEditingDomain] = useState<{ composeId: string, domainId: string, currentHost: string } | null>(null);
   const [newDomainHost, setNewDomainHost] = useState('');
-  const [newDomainCertType, setNewDomainCertType] = useState('letsencrypt');
   
   const [apiKey, setApiKey] = useState('');
 
@@ -101,7 +100,6 @@ function App() {
       currentHost: domain.host
     });
     setNewDomainHost(domain.host);
-    setNewDomainCertType(domain.certificateType || 'letsencrypt');
   };
 
   const handleSaveDomain = async () => {
@@ -111,8 +109,7 @@ function App() {
       await trpc.updateServiceDomain.mutate({
         composeId: editingDomain.composeId,
         domainId: editingDomain.domainId,
-        newHost: newDomainHost,
-        certificateType: newDomainCertType
+        newHost: newDomainHost
       });
       
       setEditingDomain(null);
@@ -127,7 +124,7 @@ function App() {
     setSelectedPreset(preset);
     
     // Set default values from preset config + cert type (applies to any service with a domain)
-    const defaults: Record<string, string> = { CERTIFICATE_TYPE: 'letsencrypt' }
+    const defaults: Record<string, string> = {}
     preset.requiredConfig.forEach((field: any) => {
       if (field.default) {
         defaults[field.id] = field.default
@@ -396,20 +393,6 @@ function App() {
                                   fontSize: '12px'
                                 }}
                               />
-                              <select
-                                value={newDomainCertType}
-                                onChange={(e) => setNewDomainCertType(e.target.value)}
-                                style={{
-                                  padding: '0.25rem 0.5rem',
-                                  marginRight: '0.5rem',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ddd',
-                                  fontSize: '12px'
-                                }}
-                              >
-                                <option value="letsencrypt">Let's Encrypt</option>
-                                <option value="none">No SSL</option>
-                              </select>
                               <button
                                 onClick={handleSaveDomain}
                                 style={{
@@ -670,28 +653,6 @@ function App() {
                   )}
                 </div>
               ))}
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>
-                  SSL certificate (for this domain):
-                  <select
-                    value={deployConfig.CERTIFICATE_TYPE || 'letsencrypt'}
-                    onChange={(e) => setDeployConfig({ ...deployConfig, CERTIFICATE_TYPE: e.target.value })}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      padding: '0.5rem',
-                      marginTop: '0.25rem',
-                      borderRadius: '4px',
-                      border: '1px solid #ddd'
-                    }}
-                  >
-                    <option value="letsencrypt">Let's Encrypt (Production)</option>
-                    <option value="none">No SSL (Local Development)</option>
-                  </select>
-                </label>
-                <small style={{ color: '#666', fontSize: '12px' }}>How Dokploy/Traefik should handle TLS for this domain.</small>
-              </div>
-
               {deployResult && (
                 <div style={{
                   marginBottom: '1rem',

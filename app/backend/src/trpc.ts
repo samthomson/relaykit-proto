@@ -12,6 +12,14 @@ const DOKPLOY_URL = 'http://dokploy:3000'
 const CONFIG_PATH = path.join('/app', '.dokploy-key')
 const DEFAULT_PROJECT_NAME = 'relaykit.ungrouped'
 
+// Dokploy domain.create expects these; dev = no Traefik cert (Caddy/mkcert), prod = Let's Encrypt
+enum CertificateType {
+  None = 'none',
+  LetsEncrypt = 'letsencrypt'
+}
+const getCertificateType = (): CertificateType =>
+  process.env.NODE_ENV === 'development' ? CertificateType.None : CertificateType.LetsEncrypt
+
 const getApiKey = async (): Promise<string> => {
   try {
     const key = await fs.readFile(CONFIG_PATH, 'utf-8')
@@ -191,8 +199,7 @@ export const appRouter = router({
     .input(z.object({
       composeId: z.string(),
       domainId: z.string(),
-      newHost: z.string(),
-      certificateType: z.string()
+      newHost: z.string()
     }))
     .mutation(async ({ input }) => {
       // Get compose details to fetch preset metadata
@@ -212,16 +219,16 @@ export const appRouter = router({
         })
       })
       
-      // 2. Create new domain
+      const certificateType = getCertificateType()
       await dokployFetch('/api/domain.create', {
         method: 'POST',
         body: JSON.stringify({
           composeId: input.composeId,
           host: input.newHost,
-          https: input.certificateType !== 'none',
+          https: certificateType !== CertificateType.None,
           path: '/',
           port: presetData.internalPort,
-          certificateType: input.certificateType,
+          certificateType,
           serviceName: presetData.serviceName
         })
       })
@@ -377,18 +384,17 @@ export const appRouter = router({
         const metadataContent = await fs.readFile(metadataPath, 'utf-8')
         const presetData = JSON.parse(metadataContent)
 
-        // 4.7. Register the domain for the service
+        // 4.7. Register the domain for the service (cert type from env: dev = mkcert/none, prod = letsencrypt)
         const hostname = input.config.RELAY_HOST
-        const certificateType = input.config.CERTIFICATE_TYPE || 'letsencrypt'
-        
+        const certificateType = getCertificateType()
         if (hostname && presetData.serviceName) {
           const domainPayload = {
             composeId: createCompose.composeId,
             host: hostname,
-            https: certificateType !== 'none',
+            https: certificateType !== CertificateType.None,
             path: '/',
             port: presetData.internalPort,
-            certificateType: certificateType,
+            certificateType,
             serviceName: presetData.serviceName
           }
           

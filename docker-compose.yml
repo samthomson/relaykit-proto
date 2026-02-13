@@ -84,6 +84,7 @@ services:
       - "4000:4000"
       - "5173:5173"
     environment:
+      - NODE_ENV=development
       - PORT=4000
     volumes:
       - ./app:/app
