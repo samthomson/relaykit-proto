@@ -1,23 +1,9 @@
 import { useState, useEffect } from 'react';
+import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { trpc } from './trpc';
 import { useDokploy } from './contexts/DokployContext';
 import { useRefreshServices } from './contexts/RefreshServicesContext';
-
-const timeAgo = (date: Date): string => {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days !== 1 ? 's' : ''} ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} mo ago`;
-  const years = Math.floor(months / 12);
-  return `${years} yr ago`;
-};
 
 const Setup = () => {
   const { dokployStatus, checkDokploy } = useDokploy();
@@ -138,14 +124,8 @@ const ServiceCard = ({
   const domain = service.domains?.[0];
   const isEditing = editingDomain?.domainId === domain?.domainId;
   const createdAt = new Date(service.createdAt);
-  const createdStr = createdAt.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  });
+  const createdStr = format(createdAt, 'd MMM yyyy, h:mm a');
+  const createdAgo = formatDistanceToNow(createdAt, { addSuffix: true });
   const httpsUrl = domain ? `https://${domain.host}` : '';
   const wssUrl = domain ? `wss://${domain.host}` : '';
 
@@ -228,7 +208,7 @@ const ServiceCard = ({
             <li className="flex items-center gap-2">
               <span className="text-gray-400 font-medium w-16 shrink-0">Created</span>
               <span>{createdStr}</span>
-              <span className="text-gray-400">({timeAgo(createdAt)})</span>
+              <span className="text-gray-400">({createdAgo})</span>
             </li>
           </ul>
           {!domain && (
