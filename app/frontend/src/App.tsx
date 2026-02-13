@@ -129,38 +129,37 @@ const ServiceCard = ({
   const httpsUrl = domain ? `https://${domain.host}` : '';
   const wssUrl = domain ? `wss://${domain.host}` : '';
 
-  const statusColors = {
-    running: 'bg-green-100 text-green-800',
-    error: 'bg-red-100 text-red-800',
-    default: 'bg-yellow-100 text-yellow-800'
-  };
-  const statusColor = service.status === 'running' ? statusColors.running : 
-                      service.status === 'error' ? statusColors.error : statusColors.default;
-
+  const deploymentPillColor =
+    service.status === 'running' ? 'bg-green-100 text-green-800' :
+    service.status === 'error' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700';
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
       <div className="flex justify-between items-start gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-lg font-semibold m-0 text-gray-900 truncate">
-              {domain ? domain.host : service.name}
-            </h3>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 shrink-0">
-              {service.serviceType}
-            </span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${statusColor}`}>
-              {service.status}
-            </span>
-          </div>
+          <h3 className="text-lg font-semibold m-0 text-gray-900 truncate">
+            {domain ? domain.host : service.name}
+          </h3>
           <ul className="mt-3 pl-4 space-y-1.5 text-sm text-gray-600 list-none border-l-2 border-gray-200 ml-1">
             <li className="flex items-center gap-2">
-              <span className="text-gray-400 font-medium w-16 shrink-0">ID</span>
+              <span className="text-gray-400 font-medium w-20 shrink-0">ID</span>
               <span className="font-mono text-xs truncate" title={service.name}>{service.name}</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-gray-400 font-medium w-20 shrink-0">Service</span>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 inline-block">
+                {service.serviceType}
+              </span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-gray-400 font-medium w-20 shrink-0">Deployment</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium inline-block ${deploymentPillColor}`}>
+                {service.status}
+              </span>
             </li>
             {domain && (
               <>
                 <li className="flex items-center gap-2 flex-wrap">
-                  <span className="text-gray-400 font-medium w-16 shrink-0">HTTPS</span>
+                  <span className="text-gray-400 font-medium w-20 shrink-0">HTTPS</span>
                   <a
                     href={httpsUrl}
                     target="_blank"
@@ -177,7 +176,7 @@ const ServiceCard = ({
                   </button>
                 </li>
                 <li className="flex items-center gap-2 flex-wrap">
-                  <span className="text-gray-400 font-medium w-16 shrink-0">WSS</span>
+                  <span className="text-gray-400 font-medium w-20 shrink-0">WSS</span>
                   <span className="font-mono text-xs truncate">{wssUrl}</span>
                   <button
                     onClick={() => onCopy(wssUrl)}
@@ -190,7 +189,7 @@ const ServiceCard = ({
             )}
             {isEditing && domain && (
               <li className="flex items-center gap-2 pt-1">
-                <span className="text-gray-400 font-medium w-16 shrink-0">Host</span>
+                <span className="text-gray-400 font-medium w-20 shrink-0">Host</span>
                 <input
                   type="text"
                   value={newDomainHost}
@@ -206,7 +205,7 @@ const ServiceCard = ({
               </li>
             )}
             <li className="flex items-center gap-2">
-              <span className="text-gray-400 font-medium w-16 shrink-0">Created</span>
+              <span className="text-gray-400 font-medium w-20 shrink-0">Created</span>
               <span>{createdStr}</span>
               <span className="text-gray-400">({createdAgo})</span>
             </li>
