@@ -4,6 +4,21 @@ import { trpc } from './trpc';
 import { useDokploy } from './contexts/DokployContext';
 import { useRefreshServices } from './contexts/RefreshServicesContext';
 
+const timeAgo = (date: Date): string => {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days !== 1 ? 's' : ''} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} mo ago`;
+  const years = Math.floor(months / 12);
+  return `${years} yr ago`;
+};
+
 const Setup = () => {
   const { dokployStatus, checkDokploy } = useDokploy();
   const [apiKey, setApiKey] = useState('');
@@ -97,8 +112,6 @@ const Setup = () => {
 
 const ServiceCard = ({
   service,
-  index,
-  total,
   editingDomain,
   newDomainHost,
   setNewDomainHost,
@@ -111,8 +124,6 @@ const ServiceCard = ({
   onDelete
 }: {
   service: any;
-  index: number;
-  total: number;
   editingDomain: { composeId: string; domainId: string; currentHost: string } | null;
   newDomainHost: string;
   setNewDomainHost: (v: string) => void;
@@ -126,7 +137,18 @@ const ServiceCard = ({
 }) => {
   const domain = service.domains?.[0];
   const isEditing = editingDomain?.domainId === domain?.domainId;
-  
+  const createdAt = new Date(service.createdAt);
+  const createdStr = createdAt.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+  const httpsUrl = domain ? `https://${domain.host}` : '';
+  const wssUrl = domain ? `wss://${domain.host}` : '';
+
   const statusColors = {
     running: 'bg-green-100 text-green-800',
     error: 'bg-red-100 text-red-800',
@@ -136,71 +158,92 @@ const ServiceCard = ({
                       service.status === 'error' ? statusColors.error : statusColors.default;
 
   return (
-    <div className={`bg-white ${index < total - 1 ? 'border-b border-gray-200' : ''}`}>
-      <div className="p-4 flex justify-between items-center">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-1 flex-wrap">
-            <h3 className="text-base font-medium m-0">{service.name}</h3>
-            <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+      <div className="flex justify-between items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h3 className="text-lg font-semibold m-0 text-gray-900 truncate">
+              {domain ? domain.host : service.name}
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 shrink-0">
               {service.serviceType}
             </span>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor}`}>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${statusColor}`}>
               {service.status}
             </span>
           </div>
-          <div className="mt-2">
-            {domain ? (
-              <div className="mb-2 p-2 bg-gray-50 rounded">
-                {isEditing ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={newDomainHost}
-                      onChange={(e) => setNewDomainHost(e.target.value)}
-                      className="px-2 py-1 border border-gray-200 rounded text-xs flex-1"
-                    />
-                    <button onClick={onSaveDomain} className="px-2 py-1 bg-success text-white rounded text-xs hover:opacity-90">
-                      Save
-                    </button>
-                    <button onClick={onCancelEdit} className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90">
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">🌐 {domain.host} (HTTPS)</span>
-                    <button
-                      onClick={() => onCopy(domain.host)}
-                      className="px-2 py-1 bg-gray-100 border border-gray-200 rounded text-xs hover:bg-gray-200"
-                      title="Copy domain"
-                    >
-                      📋
-                    </button>
-                    <button
-                      onClick={() => onEditDomain(service.composeId, domain)}
-                      className="px-2 py-1 bg-primary text-white rounded text-xs hover:bg-primary-hover"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="m-0 text-gray-400 text-xs italic">No domain configured</p>
+          <ul className="mt-3 pl-4 space-y-1.5 text-sm text-gray-600 list-none border-l-2 border-gray-200 ml-1">
+            <li className="flex items-center gap-2">
+              <span className="text-gray-400 font-medium w-16 shrink-0">ID</span>
+              <span className="font-mono text-xs truncate" title={service.name}>{service.name}</span>
+            </li>
+            {domain && (
+              <>
+                <li className="flex items-center gap-2 flex-wrap">
+                  <span className="text-gray-400 font-medium w-16 shrink-0">HTTPS</span>
+                  <a
+                    href={httpsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline truncate"
+                  >
+                    {httpsUrl} ↗
+                  </a>
+                  <button
+                    onClick={() => onCopy(httpsUrl)}
+                    className="shrink-0 px-2 py-0.5 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
+                  >
+                    Copy
+                  </button>
+                </li>
+                <li className="flex items-center gap-2 flex-wrap">
+                  <span className="text-gray-400 font-medium w-16 shrink-0">WSS</span>
+                  <span className="font-mono text-xs truncate">{wssUrl}</span>
+                  <button
+                    onClick={() => onCopy(wssUrl)}
+                    className="shrink-0 px-2 py-0.5 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
+                  >
+                    Copy
+                  </button>
+                </li>
+              </>
             )}
-          </div>
-          <p className="mt-1 text-gray-400 text-xs m-0">
-            Created: {new Date(service.createdAt).toLocaleString(undefined, {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true
-            })}
-          </p>
+            {isEditing && domain && (
+              <li className="flex items-center gap-2 pt-1">
+                <span className="text-gray-400 font-medium w-16 shrink-0">Host</span>
+                <input
+                  type="text"
+                  value={newDomainHost}
+                  onChange={(e) => setNewDomainHost(e.target.value)}
+                  className="px-2 py-1 border border-gray-200 rounded text-xs flex-1 max-w-xs"
+                />
+                <button onClick={onSaveDomain} className="px-2 py-1 bg-success text-white rounded text-xs hover:opacity-90 shrink-0">
+                  Save
+                </button>
+                <button onClick={onCancelEdit} className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:opacity-90 shrink-0">
+                  Cancel
+                </button>
+              </li>
+            )}
+            <li className="flex items-center gap-2">
+              <span className="text-gray-400 font-medium w-16 shrink-0">Created</span>
+              <span>{createdStr}</span>
+              <span className="text-gray-400">({timeAgo(createdAt)})</span>
+            </li>
+          </ul>
+          {!domain && (
+            <p className="mt-2 pl-5 text-gray-400 text-xs italic">No domain configured</p>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
+          {domain && !isEditing && (
+            <button
+              onClick={() => onEditDomain(service.composeId, domain)}
+              className="px-2 py-1.5 bg-primary text-white rounded text-xs hover:bg-primary-hover"
+            >
+              Edit
+            </button>
+          )}
           {service.status === 'running' ? (
             <button
               onClick={() => onStop(service.composeId)}
@@ -324,13 +367,11 @@ const ServiceList = () => {
       {services.length === 0 ? (
         <p className="text-gray-500 italic">No services deployed yet. Deploy your first service below!</p>
       ) : (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          {services.map((service, index) => (
+        <div className="space-y-4">
+          {services.map((service) => (
             <ServiceCard
               key={service.composeId}
               service={service}
-              index={index}
-              total={services.length}
               editingDomain={editingDomain}
               newDomainHost={newDomainHost}
               setNewDomainHost={setNewDomainHost}
