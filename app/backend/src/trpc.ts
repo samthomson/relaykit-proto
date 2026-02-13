@@ -21,7 +21,7 @@ enum CertificateType {
 const getCertificateType = (): CertificateType =>
   process.env.NODE_ENV === 'development' ? CertificateType.None : CertificateType.LetsEncrypt
 
-function parseEnvString(env: string | undefined): Record<string, string> {
+const parseServiceEnvVarsString = (env: string | undefined): Record<string, string> => {
   const out: Record<string, string> = {}
   if (!env) return out
   env.split('\n').forEach((line: string) => {
@@ -33,12 +33,12 @@ function parseEnvString(env: string | undefined): Record<string, string> {
   return out
 }
 
-async function getPresetMetadata(presetId: string) {
+const getPresetMetadata = async (presetId: string) => {
   const metadata = await fs.readFile(path.join(PRESETS_DIR, presetId, 'metadata.json'), 'utf-8')
   return JSON.parse(metadata)
 }
 
-async function ensureDefaultProject(): Promise<{ projectId: string; environmentId: string }> {
+const ensureADefaultProjectExistsForServices = async (): Promise<{ projectId: string; environmentId: string }> => {
   const projects = await dokployFetch('/api/project.all')
   let project = projects.find?.((p: { name: string }) => p.name === DEFAULT_PROJECT_NAME)
   if (project) {
@@ -50,6 +50,7 @@ async function ensureDefaultProject(): Promise<{ projectId: string; environmentI
     method: 'POST',
     body: JSON.stringify({ name: DEFAULT_PROJECT_NAME, description: 'Ungrouped services deployed via RelayKit' }),
   })
+  // Refetch: create returns projectId but we need environmentId; project.all gives full project with environments
   const all = await dokployFetch('/api/project.all')
   project = all.find((p: { projectId: string }) => p.projectId === created.projectId)
   const environmentId = project?.environments?.[0]?.environmentId
@@ -57,7 +58,7 @@ async function ensureDefaultProject(): Promise<{ projectId: string; environmentI
   return { projectId: created.projectId, environmentId }
 }
 
-async function registerDomain(composeId: string, host: string, presetData: { internalPort: number; serviceName: string }) {
+const registerDomain = async (composeId: string, host: string, presetData: { internalPort: number; serviceName: string }) => {
   const certificateType = getCertificateType()
   await dokployFetch('/api/domain.create', {
     method: 'POST',
@@ -139,7 +140,7 @@ export const appRouter = router({
           if (!presetId) throw new Error(`Service ${compose.name} has no preset ID`)
           const presetData = await getPresetMetadata(presetId)
           if (!presetData.label) throw new Error(`Preset ${presetId} has no label`)
-          const envVars = parseEnvString(compose.env)
+          const envVars = parseServiceEnvVarsString(compose.env)
           services.push({
             composeId: compose.composeId,
             name: compose.name,
@@ -224,6 +225,7 @@ export const appRouter = router({
     .mutation(async ({ input }) => {
       const compose = await dokployFetch(`/api/compose.one?composeId=${input.composeId}`)
       const presetData = await getPresetMetadata(compose.description)
+      // Dokploy has no domain.update; change domain = delete old then create new
       await dokployFetch('/api/domain.delete', {
         method: 'POST',
         body: JSON.stringify({ domainId: input.domainId })
@@ -287,7 +289,7 @@ export const appRouter = router({
         const presetDir = path.join(PRESETS_DIR, input.presetId)
         const composeContent = await fs.readFile(path.join(presetDir, 'docker-compose.yml'), 'utf-8')
         const envString = Object.entries(input.config).map(([k, v]) => `${k}=${v}`).join('\n')
-        const { environmentId } = await ensureDefaultProject()
+        const { environmentId } = await ensureADefaultProjectExistsForServices()
 
         const uniqueSuffix = Date.now()
         const composeName = `${input.presetId}-${uniqueSuffix}`
@@ -304,7 +306,7 @@ export const appRouter = router({
             composeFile,
             env: envString,
             environmentId,
-            serverId: null
+            serverId: null // use default server (where Dokploy is running)
           })
         })
         await dokployFetch('/api/compose.update', {
