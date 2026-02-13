@@ -129,3 +129,5 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 - [ ] expose volumes to user so they can manage (view/delete/optional: create service from volume)
 
 - [ ] what happens if I try to create a project with a domain already in use on another project?
+
+- [ ] some high level things per service (disk space used, maybe cpu/mem usage too? network traffic?)
