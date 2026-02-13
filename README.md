@@ -114,6 +114,9 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 
 - [ ] prod deployment
 
+- [ ] blossom?
+- [ ] one other relay type
+
 - [ ] dns record instructions for after adding a domain?
 - [ ] link/iframe two shakespeare apps I made
 
