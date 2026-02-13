@@ -109,7 +109,6 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 
 ## todo
 
-- [ ] tidy up creation process/code
 - [ ] tidy ui - react client structure (componentize)
 
 - [ ] new tab link for each relay's url
