@@ -102,23 +102,24 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 - For unique data per instance: use `{{DEPLOY_SUFFIX}}` in volume names in the compose file; the backend replaces it at deploy time so each deployment gets its own volumes.
 
 **State:**
+
 - Option 1: Store deployment metadata in our own Postgres
 - Option 2: Just query Dokploy API for deployed services (simpler)
 - Decision: Start with option 2, add Postgres only if needed
-
 
 ## todo
 
 - [ ] tidy ui - react client structure (componentize)
 
 - [ ] new tab link for each relay's url
-- [ ] dns record instructions for after adding a domain?
-- [ ] link/iframe two shakespeare apps I made
 
 - [ ] get it running the service properly
 - [ ] convey real deployment status in UI (not assumed success)
 
 - [ ] prod deployment
+
+- [ ] dns record instructions for after adding a domain?
+- [ ] link/iframe two shakespeare apps I made
 
 - [ ] change default project group for all projects to go into
 - [ ] let user specify a project/group for projects to go into
