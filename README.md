@@ -109,13 +109,24 @@ RelayKit has two domain flows: **create a service (with domain in one go)** and 
 
 ## todo
 
-- [ ] convey real deployment status in UI (not assumed success)
 - [ ] tidy up creation process/code
-- [ ] tidy ui, for how we present projects - and react client structure (componentize)
+- [ ] tidy ui - react client structure (componentize)
+
+- [ ] new tab link for each relay's url
+- [ ] dns record instructions for after adding a domain?
+- [ ] link/iframe two shakespeare apps I made
+
+- [ ] get it running the service properly
+- [ ] convey real deployment status in UI (not assumed success)
+
+- [ ] prod deployment
+
 - [ ] change default project group for all projects to go into
 - [ ] let user specify a project/group for projects to go into
-- [ ] get it running the service properly
-- [ ] dns record instructions for after adding a domain?
-- [ ] expose volumes to user so they can manage (view/delete/optional: create service from volume)
+- [ ] tidy ui, for how we present projects
+
 - [ ] can more things be exposed from stirfry, like whitelist kinds and users (and default blacklist all). and then how to reload to get this config?
-- [ ] new tab link for each relay's url
+
+- [ ] expose volumes to user so they can manage (view/delete/optional: create service from volume)
+
+- [ ] what happens if I try to create a project with a domain already in use on another project?

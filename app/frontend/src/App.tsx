@@ -217,7 +217,7 @@ function App() {
         <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#e8f5e9', borderRadius: '8px' }}>
           <h2>✓ RelayKit Configured</h2>
           <p style={{ color: '#666' }}>
-            API key is set ({dokployStatus.apiKeyLength} characters)
+            API key is set
           </p>
           <button
             onClick={() => window.location.reload()}
