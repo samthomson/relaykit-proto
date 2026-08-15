@@ -99,7 +99,7 @@ export const SettingsView = ({ config, params }: { config: HubConfigResponse; pa
           <RelayPillsInput
             value={relays}
             onChange={setRelays}
-            knownRelays={params.relays}
+            knownUrls={params.relays}
             storageKey="nh:previous-relays"
             suggestions={relaySuggestions}
           />
@@ -113,7 +113,7 @@ export const SettingsView = ({ config, params }: { config: HubConfigResponse; pa
           <RelayPillsInput
             value={discoveryRelays}
             onChange={setDiscoveryRelays}
-            knownRelays={[]}
+            knownUrls={[]}
             storageKey="nh:previous-discovery-relays"
             suggestions={discoverySuggestions}
           />

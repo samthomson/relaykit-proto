@@ -343,17 +343,30 @@ export const fetchNpanelProfile = async (pubkeyHex: string, extraRelaysCsv = '')
 
 // ── D-tag discovery (frontend) ──────────────────────────────────────
 
-export const fetchNsite35128Dtags = async (pubkeyHex: string, relayCsv: string): Promise<string[]> => {
+/** Relays used to discover kind 15128/35128 site manifests: event/manifest + discovery relays, with defaults if blank. */
+export const getNsiteManifestScanRelays = (config: Record<string, string>): string[] => {
+  const merged = mergeNsiteRelayDefaults(config)
+  const relayCsv = `${merged.NOSTR_RELAYS},${merged.LOOKUP_RELAYS}`
+  const relays = wssFromCsv(relayCsv)
+  return relays.length > 0 ? [...new Set(relays.slice(0, 18))] : [...PROFILE_DISCOVERY_RELAYS]
+}
+
+/** Discover site ids: empty string = root site (kind 15128), otherwise named site d-tags (kind 35128). */
+export const fetchNsiteManifestDtags = async (pubkeyHex: string, relayCsv: string): Promise<string[]> => {
   const relays = wssFromCsv(relayCsv)
   const pool = new SimplePool()
   const useRelays: string[] = relays.length > 0 ? relays.slice(0, 18) : [...PROFILE_DISCOVERY_RELAYS]
-  const filter = { kinds: [35128 as const], authors: [pubkeyHex], limit: 500 }
+  const filter = { kinds: [15128 as const, 35128 as const], authors: [pubkeyHex], limit: 500 }
   try {
     const evs = await pool.querySync(useRelays, filter)
     const dtags = new Set<string>()
     for (const e of evs) {
-      for (const t of e.tags) {
-        if (t[0] === 'd' && t[1]) dtags.add(t[1])
+      if (e.kind === 15128) {
+        dtags.add('')
+      } else if (e.kind === 35128) {
+        for (const t of e.tags) {
+          if (t[0] === 'd' && typeof t[1] === 'string' && t[1]) dtags.add(t[1])
+        }
       }
     }
     return [...dtags].sort()

@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import { Button, Stack, Text, TextInput } from '@mantine/core';
 import { nip19 } from 'nostr-tools';
-import { NpubInput, RelayPillsInput, dedupeRelays } from '@relaykit/ui';
+import { NpubInput, RelayPillsInput, dedupeHttpsUrls, dedupeRelays } from '@relaykit/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useRefreshServices } from '../contexts/RefreshServicesContext';
-import { isRelayType } from '../../../shared/serviceType';
+import { isRelayType, SERVICE_TYPE } from '../../../shared/serviceType';
 
 const toNpub = (value: string | null): string | null => {
   if (!value) return null;
@@ -93,28 +93,64 @@ export const NpubField = ({
 };
 
 /** Relay list editor (pills + typeahead) storing its value as a comma-separated string. */
-export const RelaysField = ({
+export const RelaysField = (props: {
+  label: string;
+  description?: string;
+  value: string;
+  onChange: (csv: string) => void;
+}) => <EndpointListField {...props} scheme="relay" />;
+
+/** Blossom / https URL list editor (pills + typeahead) storing its value as a comma-separated string. */
+export const BlossomServersField = (props: {
+  label: string;
+  description?: string;
+  value: string;
+  onChange: (csv: string) => void;
+}) => <EndpointListField {...props} scheme="https" />;
+
+const ENDPOINT_FIELD = {
+  relay: {
+    dedupe: dedupeRelays,
+    storageKey: 'rk:previous-relays',
+    matchService: isRelayType,
+    toServiceUrl: (host: string) => `wss://${host}`,
+  },
+  https: {
+    dedupe: dedupeHttpsUrls,
+    storageKey: 'rk:previous-blossom-urls',
+    matchService: (type: string) => type === SERVICE_TYPE.BLOSSOM,
+    toServiceUrl: (host: string) => `https://${host}`,
+  },
+} as const;
+
+const EndpointListField = ({
   label,
   description,
   value,
   onChange,
+  scheme,
 }: {
   label: string;
   description?: string;
   value: string;
   onChange: (csv: string) => void;
+  scheme: keyof typeof ENDPOINT_FIELD;
 }) => {
+  const cfg = ENDPOINT_FIELD[scheme];
   const { services } = useRefreshServices();
-  const knownRelays = useMemo(
+  const knownUrls = useMemo(
     () =>
-      dedupeRelays(
+      ENDPOINT_FIELD[scheme].dedupe(
         (Array.isArray(services) ? services : [])
-          .filter((service: any) => isRelayType(service?.type) && service?.domains?.[0]?.host)
-          .map((service: any) => `wss://${service.domains[0].host}`),
+          .filter((service: any) => ENDPOINT_FIELD[scheme].matchService(service?.type) && service?.domains?.[0]?.host)
+          .map((service: any) => ENDPOINT_FIELD[scheme].toServiceUrl(service.domains[0].host)),
       ),
-    [services],
+    [services, scheme],
   );
-  const relays = useMemo(() => dedupeRelays(value.split(',').map((r) => r.trim()).filter(Boolean)), [value]);
+  const urls = useMemo(
+    () => ENDPOINT_FIELD[scheme].dedupe(value.split(',').map((r) => r.trim()).filter(Boolean)),
+    [value, scheme],
+  );
   return (
     <Stack gap={4}>
       <Stack gap={0}>
@@ -122,10 +158,11 @@ export const RelaysField = ({
         {description && <Text size="xs" c="dimmed">{description}</Text>}
       </Stack>
       <RelayPillsInput
-        value={relays}
+        value={urls}
         onChange={(next: string[]) => onChange(next.join(','))}
-        knownRelays={knownRelays}
-        storageKey="rk:previous-relays"
+        knownUrls={knownUrls}
+        storageKey={cfg.storageKey}
+        scheme={scheme}
       />
     </Stack>
   );

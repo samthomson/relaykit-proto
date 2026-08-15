@@ -1,13 +1,45 @@
 import { useMemo, useState } from 'react'
 import { Button, CloseButton, Combobox, Group, Pill, PillsInput, Stack, Text, rem, useCombobox } from '@mantine/core'
 import { dedupeRelays } from './relays'
+import { dedupeHttpsUrls } from './urls'
 
-/** A labelled set of relays offered as one-click adds below the input (e.g. the user's own nip-65 list). */
+/** A labelled set of urls offered as one-click adds below the input (e.g. the user's own nip-65 list). */
 export type RelaySuggestionGroup = { label: string; relays: string[] }
 
-const MAX_PREVIOUS_RELAYS = 20
+type EndpointScheme = 'relay' | 'https'
 
-const loadPreviousRelays = (storageKey: string): string[] => {
+const SCHEME = {
+  relay: {
+    dedupe: dedupeRelays,
+    stripPrefix: /^wss?:\/\//,
+    emptyPlaceholder: 'wss://relay.example.com',
+    addPlaceholder: 'add relay...',
+    emptyMessage: 'no relay matches — press enter to add',
+    ariaLabel: 'relay url',
+    forgetLabel: 'forget relay',
+  },
+  https: {
+    dedupe: dedupeHttpsUrls,
+    stripPrefix: /^https?:\/\//,
+    emptyPlaceholder: 'https://blossom.example.com',
+    addPlaceholder: 'add url...',
+    emptyMessage: 'no url matches — press enter to add',
+    ariaLabel: 'url',
+    forgetLabel: 'forget url',
+  },
+} as const satisfies Record<EndpointScheme, {
+  dedupe: (urls: string[]) => string[]
+  stripPrefix: RegExp
+  emptyPlaceholder: string
+  addPlaceholder: string
+  emptyMessage: string
+  ariaLabel: string
+  forgetLabel: string
+}>
+
+const MAX_PREVIOUS = 20
+
+const loadPrevious = (storageKey: string): string[] => {
   try {
     const stored = localStorage.getItem(storageKey)
     if (stored) {
@@ -19,82 +51,88 @@ const loadPreviousRelays = (storageKey: string): string[] => {
 }
 
 /**
- * Multi-select relay picker: selected relays as removable pills, typeahead dropdown
- * seeded with relaykit's known relays plus previously used ones (persisted per app).
- * In prod all apps share the relaykit origin, so storageKey must be app-namespaced (e.g. 'nh:previous-relays').
+ * Multi-select endpoint picker (wss relays or https blossom bases): removable pills, typeahead
+ * from known services plus previously used entries (persisted per app).
  */
 export const RelayPillsInput = ({
   value,
   onChange,
-  knownRelays,
+  knownUrls,
   storageKey,
   suggestions,
+  scheme = 'relay',
+  placeholder,
 }: {
   value: string[]
-  onChange: (relays: string[]) => void
-  /** relays known to relaykit (deployed services), shown first in the dropdown */
-  knownRelays: string[]
-  /** app-namespaced localStorage key for remembering manually added relays */
+  onChange: (urls: string[]) => void
+  /** urls known to relaykit (deployed services), shown first in the dropdown */
+  knownUrls: string[]
+  /** app-namespaced localStorage key for remembering manually added urls */
   storageKey: string
   /** optional one-click adds rendered below the input; nothing is ever added implicitly */
   suggestions?: RelaySuggestionGroup[]
+  scheme?: EndpointScheme
+  placeholder?: string
 }) => {
+  const cfg = SCHEME[scheme]
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() })
   const [draft, setDraft] = useState('')
-  const [previousRelays, setPreviousRelays] = useState<string[]>(() => loadPreviousRelays(storageKey))
+  const [previousUrls, setPreviousUrls] = useState<string[]>(() => loadPrevious(storageKey))
 
   const persistPrevious = (next: string[]) => {
-    setPreviousRelays(next)
+    setPreviousUrls(next)
     try {
       localStorage.setItem(storageKey, JSON.stringify(next))
     } catch {}
   }
 
-  const addRelay = (url: string, { remember = false }: { remember?: boolean } = {}) => {
-    const [normalized] = dedupeRelays([url])
+  const addUrl = (url: string, { remember = false }: { remember?: boolean } = {}) => {
+    const [normalized] = cfg.dedupe([url])
     if (!normalized) return
-    if (remember && !knownRelays.includes(normalized)) {
-      persistPrevious([normalized, ...previousRelays.filter((r) => r !== normalized)].slice(0, MAX_PREVIOUS_RELAYS))
+    if (remember && !knownUrls.includes(normalized)) {
+      persistPrevious([normalized, ...previousUrls.filter((r) => r !== normalized)].slice(0, MAX_PREVIOUS))
     }
     if (!value.includes(normalized)) onChange([...value, normalized])
     setDraft('')
   }
 
-  const removeRelay = (url: string) => {
+  const removeUrl = (url: string) => {
     onChange(value.filter((r) => r !== url))
   }
 
-  const forgetPreviousRelay = (url: string) => {
-    persistPrevious(previousRelays.filter((r) => r !== url))
+  const forgetPrevious = (url: string) => {
+    persistPrevious(previousUrls.filter((r) => r !== url))
   }
 
   const options = useMemo(() => {
     const query = draft.trim().toLowerCase()
-    const known = knownRelays
-      .filter((relay) => !value.includes(relay))
-      .filter((relay) => !query || relay.toLowerCase().includes(query))
-      .map((relay) => ({ value: relay, source: 'service' as const }))
-    const previous = previousRelays
-      .filter((relay) => !knownRelays.includes(relay) && !value.includes(relay))
-      .filter((relay) => !query || relay.toLowerCase().includes(query))
-      .map((relay) => ({ value: relay, source: 'previous' as const }))
+    const known = knownUrls
+      .filter((url) => !value.includes(url))
+      .filter((url) => !query || url.toLowerCase().includes(query))
+      .map((url) => ({ value: url, source: 'service' as const }))
+    const previous = previousUrls
+      .filter((url) => !knownUrls.includes(url) && !value.includes(url))
+      .filter((url) => !query || url.toLowerCase().includes(query))
+      .map((url) => ({ value: url, source: 'previous' as const }))
     return [...known, ...previous]
-  }, [knownRelays, previousRelays, value, draft])
+  }, [knownUrls, previousUrls, value, draft])
 
   const suggestionGroups = useMemo(
     () =>
       (suggestions ?? [])
-        .map((group) => ({ label: group.label, relays: dedupeRelays(group.relays).filter((r) => !value.includes(r)) }))
-        .filter((group) => group.relays.length > 0),
-    [suggestions, value],
+        .map((group) => ({ label: group.label, urls: cfg.dedupe(group.relays).filter((r) => !value.includes(r)) }))
+        .filter((group) => group.urls.length > 0),
+    [suggestions, value, cfg],
   )
+
+  const emptyPlaceholder = placeholder ?? cfg.emptyPlaceholder
 
   const input = (
     <Combobox
       store={combobox}
       withinPortal={false}
       onOptionSubmit={(url) => {
-        addRelay(url)
+        addUrl(url)
         combobox.closeDropdown()
       }}
     >
@@ -107,21 +145,21 @@ export const RelayPillsInput = ({
           }}
         >
           <Pill.Group>
-            {value.map((relay) => (
+            {value.map((url) => (
               <Pill
-                key={relay}
+                key={url}
                 size="xs"
                 color="relaykit"
                 variant="light"
                 withRemoveButton
-                onRemove={() => removeRelay(relay)}
-                title={relay}
+                onRemove={() => removeUrl(url)}
+                title={url}
               >
-                {relay.replace(/^wss:\/\//, '')}
+                {url.replace(cfg.stripPrefix, '')}
               </Pill>
             ))}
             <PillsInput.Field
-              aria-label="relay url"
+              aria-label={cfg.ariaLabel}
               value={draft}
               onChange={(e) => {
                 setDraft(e.currentTarget.value)
@@ -133,20 +171,20 @@ export const RelayPillsInput = ({
                 combobox.resetSelectedOption()
               }}
               onBlur={() => {
-                if (draft.trim()) addRelay(draft, { remember: true })
+                if (draft.trim()) addUrl(draft, { remember: true })
                 combobox.closeDropdown()
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (!combobox.dropdownOpened || options.length === 0)) {
                   e.preventDefault()
-                  addRelay(draft, { remember: true })
+                  addUrl(draft, { remember: true })
                 }
                 if ((e.key === 'Backspace' || e.key === 'Delete') && draft.length === 0 && value.length > 0) {
                   e.preventDefault()
-                  removeRelay(value[value.length - 1])
+                  removeUrl(value[value.length - 1])
                 }
               }}
-              placeholder={value.length === 0 ? 'wss://relay.example.com' : 'add relay...'}
+              placeholder={value.length === 0 ? emptyPlaceholder : cfg.addPlaceholder}
               style={{ flex: 1, minWidth: rem(140), fontFamily: 'monospace' }}
             />
           </Pill.Group>
@@ -165,11 +203,11 @@ export const RelayPillsInput = ({
                   {option.source === 'previous' && (
                     <CloseButton
                       size="xs"
-                      aria-label="forget relay"
+                      aria-label={cfg.forgetLabel}
                       onMouseDown={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        forgetPreviousRelay(option.value)
+                        forgetPrevious(option.value)
                       }}
                     />
                   )}
@@ -177,7 +215,7 @@ export const RelayPillsInput = ({
               </Combobox.Option>
             ))
           ) : (
-            <Combobox.Empty>no relay matches — press enter to add</Combobox.Empty>
+            <Combobox.Empty>{cfg.emptyMessage}</Combobox.Empty>
           )}
         </Combobox.Options>
       </Combobox.Dropdown>
@@ -192,15 +230,15 @@ export const RelayPillsInput = ({
       {suggestionGroups.map((group) => (
         <Group key={group.label} gap={6} align="center">
           <Text size="xs" c="dimmed">{group.label}</Text>
-          {group.relays.map((relay) => (
+          {group.urls.map((url) => (
             <Button
-              key={relay}
+              key={url}
               size="compact-xs"
               variant="default"
-              onClick={() => addRelay(relay)}
+              onClick={() => addUrl(url)}
               styles={{ label: { fontFamily: 'monospace', fontSize: rem(10) } }}
             >
-              + {relay.replace(/^wss:\/\//, '')}
+              + {url.replace(cfg.stripPrefix, '')}
             </Button>
           ))}
         </Group>

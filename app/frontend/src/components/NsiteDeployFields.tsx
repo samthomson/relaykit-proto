@@ -9,9 +9,10 @@ import {
   tryBuildNsitePublicHostname,
   parsePubkeyHex as toPubkeyHex,
   fetchNsiteRelayEnvFromProfile,
-  fetchNsite35128Dtags,
+  fetchNsiteManifestDtags,
+  getNsiteManifestScanRelays,
 } from '../../../shared/nsite';
-import { UrlListCsvEditor } from './UrlListCsvEditor';
+import { BlossomServersField, RelaysField } from './PresetFieldInputs';
 import { FormSection } from './FormSection';
 import { TextInput, Stack, Text, Group, Button, Switch, Combobox, Pill, PillsInput, useCombobox } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
@@ -177,53 +178,63 @@ export const NsiteDeployFields = ({
     setConfig((prev) => ({ ...prev, NSITE_VISITOR_HOST: on ? '' : (prev.NSITE_PARENT_DOMAIN ?? '') }));
   };
 
-  const runDiscover35128 = (opts?: { silent?: boolean }) => {
+  const scanRelays = useMemo(
+    () =>
+      getNsiteManifestScanRelays({
+        NOSTR_RELAYS: config.NOSTR_RELAYS ?? '',
+        LOOKUP_RELAYS: config.LOOKUP_RELAYS ?? '',
+      }),
+    [config.NOSTR_RELAYS, config.LOOKUP_RELAYS],
+  );
+
+  const runDiscoverManifests = useCallback((opts?: { silent?: boolean }) => {
     const hex = toPubkeyHex((config.NSITE_SITE_NPUB ?? '').trim());
     if (!hex) {
       if (!opts?.silent) toast.error('Enter a valid publishing key first.');
       return;
     }
-    const merged = mergeNsiteRelayDefaults(config);
-    const relayCsv = `${merged.NOSTR_RELAYS},${merged.LOOKUP_RELAYS}`;
     setDDiscoverLoading(true);
-    fetchNsite35128Dtags(hex, relayCsv)
+    fetchNsiteManifestDtags(hex, scanRelays.join(','))
       .then((tags) => {
         setDDiscovered(tags);
         if (opts?.silent) return;
-        if (tags.length === 0) toast('No kind 35128 found for this pubkey on the queried relays.');
-        else toast.success(`Found ${tags.length} site id(s).`);
+        if (tags.length === 0) toast('No site manifests (kind 15128/35128) found on the queried relays.');
+        else toast.success(`Found ${tags.length} site(s).`);
       })
       .catch(() => {
-        if (!opts?.silent) toast.error('Could not query relays for kind 35128.');
+        if (!opts?.silent) toast.error('Could not query relays for site manifests.');
       })
       .finally(() => setDDiscoverLoading(false));
-  };
+  }, [config.NSITE_SITE_NPUB, scanRelays]);
 
-  // Auto-discover available site ids whenever there's a valid publishing key, so the picker is populated.
+  const manifestScanPubkey = (config.NSITE_SITE_NPUB ?? '').trim();
+
+  // Auto-discover whenever the publishing key or scan relays change.
   useEffect(() => {
-    if (toPubkeyHex((config.NSITE_SITE_NPUB ?? '').trim())) runDiscover35128({ silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.NSITE_SITE_NPUB]);
+    if (!toPubkeyHex(manifestScanPubkey)) return;
+    const t = setTimeout(() => runDiscoverManifests({ silent: true }), 400);
+    return () => clearTimeout(t);
+  }, [manifestScanPubkey, runDiscoverManifests]);
 
-  const renderUrlListField = (field: any) => (
-    <UrlListCsvEditor
-      key={field.id}
-      label={field.name}
-      description={field.description}
-      value={config[field.id] ?? ''}
-      onChange={(csv) => setConfig((c) => ({ ...c, [field.id]: csv }))}
-      addPlaceholder={
-        field.id === 'BLOSSOM_SERVERS'
-          ? 'https://… — Enter (paste comma-separated for several)'
-          : 'wss://… — Enter (paste comma-separated for several)'
-      }
-    />
-  );
+  const renderEndpointField = (field: { id: string; name: string; description?: string }) => {
+    const props = {
+      label: field.name,
+      description: field.description,
+      value: config[field.id] ?? '',
+      onChange: (csv: string) => setConfig((c) => ({ ...c, [field.id]: csv })),
+    };
+    return field.id === 'BLOSSOM_SERVERS' ? (
+      <BlossomServersField key={field.id} {...props} />
+    ) : (
+      <RelaysField key={field.id} {...props} />
+    );
+  };
 
   const siteIdValue = (config.NSITE_SITE_D ?? '').trim();
   const useSelectForSiteId = dDiscovered.length > 0 && !manualSiteId;
   const siteIdOptions = (() => {
     const set = new Set(dDiscovered);
+    set.delete('');
     if (siteIdValue) set.add(siteIdValue);
     return [...set];
   })();
@@ -304,7 +315,7 @@ export const NsiteDeployFields = ({
           ) : (
             <TextInput
               label="site id"
-              description="which site under this key (kind 35128). leave empty for a root site."
+              description="which site under this key (15128 root or 35128 named). leave empty for root site."
               placeholder={dDiscoverLoading ? 'discovering published sites…' : 'myblog — empty = root site'}
               value={config.NSITE_SITE_D ?? ''}
               onChange={(e) => setConfig((c) => ({ ...c, NSITE_SITE_D: e.currentTarget.value }))}
@@ -316,7 +327,7 @@ export const NsiteDeployFields = ({
               size="compact-xs"
               px={0}
               leftSection={<IconRefresh size={12} />}
-              onClick={() => runDiscover35128()}
+              onClick={() => runDiscoverManifests()}
               loading={dDiscoverLoading}
             >
               re-scan sites
@@ -327,6 +338,16 @@ export const NsiteDeployFields = ({
               </Button>
             )}
           </Group>
+          {scanRelays.length > 0 && (
+            <Text size="xs" c="dimmed">
+              site scan uses event/manifest + discovery relays below
+              {scanRelays.map((r) => (
+                <Text key={r} component="div" ff="monospace" mt={2}>
+                  {r}
+                </Text>
+              ))}
+            </Text>
+          )}
         </Stack>
 
         {hostnamePreview.ok && servedAtHost && (
@@ -395,7 +416,7 @@ export const NsiteDeployFields = ({
             manually below.
           </Text>
         )}
-        {advancedFields.map(renderUrlListField)}
+        {advancedFields.map(renderEndpointField)}
       </FormSection>
 
       <FormSection
