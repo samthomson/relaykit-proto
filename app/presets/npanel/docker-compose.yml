@@ -15,7 +15,9 @@ services:
     expose:
       - "3000"
     networks:
-      - internal
+      internal:
+        aliases:
+          - nsite-gateway-{{DEPLOY_SUFFIX}}
 
   npanel-nip05:
     image: python:3.12-alpine
@@ -65,7 +67,9 @@ services:
     expose:
       - "8090"
     networks:
-      - internal
+      internal:
+        aliases:
+          - npanel-nip05-{{DEPLOY_SUFFIX}}
 
   npanel-caddy:
     image: caddy:alpine
@@ -75,7 +79,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        printf ':8080 {\n  @nip05 path /.well-known/nostr.json\n  handle @nip05 {\n    reverse_proxy http://npanel-nip05:8090\n  }\n  @assets path *.js *.mjs *.css *.map *.woff *.woff2 *.ttf *.otf *.png *.jpg *.jpeg *.gif *.svg *.webp *.avif *.ico\n  handle @assets {\n    reverse_proxy http://nsite-gateway:3000 {\n      header_up Host %s\n      header_down Cache-Control "public, max-age=31536000, immutable"\n    }\n  }\n  handle {\n    reverse_proxy http://nsite-gateway:3000 {\n      header_up Host %s\n      header_down Cache-Control "no-cache"\n    }\n  }\n}\n' "$$CANONICAL_HOST" "$$CANONICAL_HOST" > /tmp/Caddyfile && exec caddy run --config /tmp/Caddyfile
+        printf ':8080 {\n  @nip05 path /.well-known/nostr.json\n  handle @nip05 {\n    reverse_proxy http://npanel-nip05-{{DEPLOY_SUFFIX}}:8090\n  }\n  @assets path *.js *.mjs *.css *.map *.woff *.woff2 *.ttf *.otf *.png *.jpg *.jpeg *.gif *.svg *.webp *.avif *.ico\n  handle @assets {\n    reverse_proxy http://nsite-gateway-{{DEPLOY_SUFFIX}}:3000 {\n      header_up Host %s\n      header_down Cache-Control "public, max-age=31536000, immutable"\n    }\n  }\n  handle {\n    reverse_proxy http://nsite-gateway-{{DEPLOY_SUFFIX}}:3000 {\n      header_up Host %s\n      header_down Cache-Control "no-cache"\n    }\n  }\n}\n' "$$CANONICAL_HOST" "$$CANONICAL_HOST" > /tmp/Caddyfile && exec caddy run --config /tmp/Caddyfile
     expose:
       - "8080"
     depends_on:
@@ -91,6 +95,8 @@ volumes:
 # nsite-gateway / npanel-nip05 live only on a private per-deployment network so their compose service-name
 # aliases (e.g. "nsite-gateway") can't collide with other nsite/npanel deployments on the shared dokploy-network
 # (which caused Caddy to round-robin to a stale gateway). Only caddy joins dokploy-network for Traefik.
+# Caddy is on both networks, so it must target the per-deployment aliases: a bare "nsite-gateway" resolves
+# to whichever deployment holds that alias on dokploy-network, not necessarily this deployment's gateway.
 networks:
   dokploy-network:
     external: true
