@@ -4,6 +4,7 @@ import dns from 'dns/promises'
 import fs from 'fs/promises'
 import path from 'path'
 import http from 'http'
+import os from 'os'
 import { createAuthContext, requireAuth, AuthContext } from './auth/middleware'
 import { getBootstrapKey, setBootstrapKey } from './db'
 import {
@@ -12,7 +13,26 @@ import {
   DEFAULT_PROJECT_NAME,
   SERVER_INSIGHTS,
   SERVICE_INSIGHTS,
+  VERSION_FILE_PATH,
 } from './constants'
+import {
+  DOCKER_SOCKET_PATH,
+  dockerSocketGetBuffer,
+  dockerSocketGetJson,
+  dockerSocketMutate,
+} from './dockerSocket'
+import {
+  compareVersions,
+  fetchRemoteImageVersion,
+  getOwnImageRef,
+  readRelaykitVersion,
+  readUpdateChannel,
+  startSelfUpdate,
+  writeUpdateChannel,
+  type RelaykitVersion,
+  type RemoteVersion,
+} from './selfUpdate'
+import { RELAYKIT_UPDATE_CHANNELS, type RelaykitUpdateChannel } from './constants'
 import { isNpanelType } from '../../shared/serviceType'
 import { applyNsiteHostnameToEnv, finalizeNsiteRouterEnv, normalizeNpanelNip05UsersEnv, normalizeVisitorHost, NPANEL_NIP05_USERS_ENV_KEY } from '../../shared/nsite'
 import { createServerInsightsCollector, trimInsightPointsToWindow, type ServiceInsightsResponse } from '../../shared/insights'
@@ -336,92 +356,6 @@ const estimateSampleIntervalMs = (history: { ts: number }[]): number => {
 }
 
 const serviceInsightsHistory = new Map<string, ServiceInsightsResponse['history']>()
-const DOCKER_SOCKET_PATH = '/var/run/docker.sock'
-
-const dockerSocketGetJson = async (pathWithQuery: string): Promise<any> =>
-  new Promise((resolve, reject) => {
-    const req = http.request(
-      {
-        socketPath: DOCKER_SOCKET_PATH,
-        path: pathWithQuery,
-        method: 'GET',
-      },
-      (res) => {
-        let body = ''
-        res.setEncoding('utf8')
-        res.on('data', (chunk) => {
-          body += chunk
-        })
-        res.on('end', () => {
-          if ((res.statusCode || 500) >= 400) {
-            reject(new Error(`Docker API ${res.statusCode}: ${body.slice(0, 200)}`))
-            return
-          }
-          try {
-            resolve(JSON.parse(body))
-          } catch {
-            reject(new Error(`Invalid JSON from Docker API: ${body.slice(0, 200)}`))
-          }
-        })
-      }
-    )
-    req.on('error', reject)
-    req.end()
-  })
-
-const dockerSocketGetBuffer = async (pathWithQuery: string): Promise<Buffer> =>
-  new Promise((resolve, reject) => {
-    const req = http.request(
-      {
-        socketPath: DOCKER_SOCKET_PATH,
-        path: pathWithQuery,
-        method: 'GET',
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk) => {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-        })
-        res.on('end', () => {
-          const body = Buffer.concat(chunks)
-          if ((res.statusCode || 500) >= 400) {
-            reject(new Error(`Docker API ${res.statusCode}: ${body.toString('utf8').slice(0, 200)}`))
-            return
-          }
-          resolve(body)
-        })
-      }
-    )
-    req.on('error', reject)
-    req.end()
-  })
-
-const dockerSocketMutate = async (pathWithQuery: string, method: 'POST' | 'DELETE'): Promise<Buffer> =>
-  new Promise((resolve, reject) => {
-    const req = http.request(
-      {
-        socketPath: DOCKER_SOCKET_PATH,
-        path: pathWithQuery,
-        method,
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk) => {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-        })
-        res.on('end', () => {
-          const body = Buffer.concat(chunks)
-          if ((res.statusCode || 500) >= 400) {
-            reject(new Error(`Docker API ${method} ${res.statusCode}: ${body.toString('utf8').slice(0, 200)}`))
-            return
-          }
-          resolve(body)
-        })
-      }
-    )
-    req.on('error', reject)
-    req.end()
-  })
 
 const decodeDockerLogPayload = (body: Buffer): string => {
   if (body.length < 8) return body.toString('utf8')
@@ -1510,9 +1444,66 @@ export const appRouter = router({
         if (ips.length > 0 && ips.every(isCloudflareIp)) return { ok: false, proxied: 'cloudflare' as const, ips }
         return { ok: false, ips }
       } catch (e: any) {
-        return { ok: false, ips: [], error: e?.message || 'DNS lookup failed' }
+        return { ok: false, error: e?.message }
       }
     }),
+
+  getRelaykitVersion: protectedProcedure
+    .query(async () => {
+      const [version, imageRef] = await Promise.all([readRelaykitVersion(), getOwnImageRef()])
+      return { ...version, imageRef }
+    }),
+
+  checkRelaykitUpdate: protectedProcedure
+    .query(async () => {
+      const current = await readRelaykitVersion()
+      const channel = await readUpdateChannel()
+      const imageRef = await getOwnImageRef()
+      let latest: RemoteVersion | null = null
+      let error: string | null = null
+      if (imageRef) {
+        try {
+          latest = await fetchRemoteImageVersion(imageRef, channel)
+        } catch (e: unknown) {
+          error = e instanceof Error ? e.message : 'failed to reach image registry'
+        }
+      } else {
+        error = 'no docker socket or not running in a container; update check skipped'
+      }
+      return {
+        current,
+        channel,
+        channels: RELAYKIT_UPDATE_CHANNELS,
+        imageRef,
+        latest,
+        updateAvailable: !!latest && compareVersions(latest.version, current.version) > 0,
+        error,
+      }
+    }),
+
+  setUpdateChannel: protectedProcedure
+    .input(z.object({ channel: z.enum(RELAYKIT_UPDATE_CHANNELS) }))
+    .mutation(async ({ input }) => {
+      await writeUpdateChannel(input.channel as RelaykitUpdateChannel)
+      return { success: true, channel: input.channel }
+    }),
+
+  /**
+   * Update the whole relaykit stack (relaykit + pinned dokploy/traefik/postgres/redis) to the
+   * release-channel image. Responds before the stack is recreated: this container is replaced
+   * mid-update by the detached helper, so the UI must expect a connection drop after success.
+   */
+  updateRelaykit: protectedProcedure
+    .mutation(async () => {
+      const channel = await readUpdateChannel()
+      const { imageRef } = await startSelfUpdate(os.hostname(), channel)
+      return {
+        success: true,
+        imageRef,
+        message: 'Update started. RelayKit is restarting; the dashboard will reconnect automatically.',
+      }
+    }),
+
 
 
   deployService: protectedProcedure

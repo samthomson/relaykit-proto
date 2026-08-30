@@ -155,6 +155,16 @@ Optional overrides for image deploy:
 
 If GHCR package is private, run `docker login ghcr.io` on the server first (PAT with `read:packages`).
 
+## Updating RelayKit
+
+Releases are versioned images. `app/version.json` is the single source of truth: `version` (relaykit semver), `dokployVersion` (the dokploy pin this release ships), `notes` (shown in the update dialog). Each image also bakes in `app/release.yml` — the prod-only stack definition — and CI stamps the version/notes as image labels on GHCR.
+
+**Releasing (maintainer):** bump `app/version.json` (and the dokploy/traefik pins if adopting a new dokploy), commit, push a git tag matching the version (`v1.4.3`). CI builds and pushes `ghcr.io/<owner>/relaykit:v1.4.3` + `:latest` with the version label.
+
+**Updating (owner, in the dashboard):** the navbar shows the running version and a green "update" badge when GHCR's `latest` label reports a higher semver (checked anonymously via the OCI registry API — no auth server needed). Clicking update pulls the new image, stages its bundled `release.yml` onto the shared data volume, and starts a one-shot `docker:cli` helper container (over the docker socket) that runs `docker compose up -d --pull always` for the whole stack. The control plane (relaykit + dokploy) restarts for a few seconds; Traefik and all hosted services keep running throughout. The dashboard shows an "updating" overlay and reconnects automatically.
+
+Version bump semantics are your call per release: semver reflects user-visible impact; a release that only adopts a newer dokploy is typically a patch.
+
 ## Key Technical Details
 
 **Dokploy Integration:**
@@ -209,7 +219,7 @@ next:
 - [ ] what happens if I try to create a project with a domain already in use on another project?
 - [ ] improve blossom app
 - [ ] negentropy app
-- [ ] uptime/service monitoring app
+- [x] updates (in-dashboard self-update; see "Updating RelayKit")
 
 maybe later:
 - [ ] expose volumes to user so they can manage (view/delete/optional: create service from volume)

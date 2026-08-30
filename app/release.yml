@@ -1,0 +1,200 @@
+# GENERATED from docker-compose.yml by scripts/gen-release-yml.sh — do not edit by hand.
+# Prod-only stack definition baked into the relaykit image; applied by the in-UI self-update
+# (docker compose -p <project> -f release.yml --profile prod up -d --pull always).
+networks:
+  dokploy-network:
+    external: true
+    name: dokploy-network
+  relaykit-network:
+    driver: bridge
+    name: relaykit-network
+services:
+  dokploy:
+    depends_on:
+      dokploy-postgres:
+        condition: service_healthy
+        required: true
+      dokploy-redis:
+        condition: service_healthy
+        required: true
+    environment:
+      - DATABASE_URL=postgresql://dokploy:dokploy_secret@dokploy-postgres:5432/dokploy
+      - REDIS_URL=redis://dokploy-redis:6379
+    image: dokploy/dokploy:v0.30.2
+    networks:
+      default: null
+      relaykit-network: null
+    ports:
+      - mode: ingress
+        protocol: tcp
+        published: "3020"
+        target: 3000
+    restart: unless-stopped
+    volumes:
+      - bind:
+          create_host_path: true
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        type: bind
+      - source: dokploy_data
+        target: /etc/dokploy
+        type: volume
+        volume: {}
+  dokploy-postgres:
+    environment:
+      POSTGRES_DB: dokploy
+      POSTGRES_PASSWORD: dokploy_secret
+      POSTGRES_USER: dokploy
+    healthcheck:
+      interval: 5s
+      retries: 5
+      test:
+        - CMD-SHELL
+        - pg_isready -U dokploy
+      timeout: 5s
+    image: postgres:16-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        protocol: tcp
+        published: "5432"
+        target: 5432
+    restart: unless-stopped
+    volumes:
+      - source: postgres_data
+        target: /var/lib/postgresql/data
+        type: volume
+        volume: {}
+  dokploy-redis:
+    healthcheck:
+      interval: 5s
+      retries: 5
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 5s
+    image: redis:7-alpine
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+      - source: redis_data
+        target: /data
+        type: volume
+        volume: {}
+  dokploy-traefik-prod:
+    command: --configFile=/etc/dokploy/traefik/traefik.yml
+    depends_on:
+      dokploy:
+        condition: service_started
+        required: true
+    image: traefik:v3.6.7
+    networks:
+      default: null
+      dokploy-network: null
+      relaykit-network: null
+    ports:
+      - mode: ingress
+        protocol: tcp
+        published: "80"
+        target: 80
+      - mode: ingress
+        protocol: tcp
+        published: "443"
+        target: 443
+    profiles:
+      - prod
+    restart: unless-stopped
+    volumes:
+      - source: dokploy_data
+        target: /etc/dokploy
+        type: volume
+        volume: {}
+      - bind:
+          create_host_path: true
+        read_only: true
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        type: bind
+  hello-world:
+    image: ${HELLO_WORLD_IMAGE:-ghcr.io/samthomson/relaykit-hello-world:stable}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.hello-world-secure.rule=Host(`${RELAYKIT_HOST}`) && PathPrefix(`/apps/hello-world`)
+      - traefik.http.routers.hello-world-secure.priority=200
+      - traefik.http.routers.hello-world-secure.entrypoints=websecure
+      - traefik.http.routers.hello-world-secure.tls.certresolver=letsencrypt
+      - traefik.http.routers.hello-world-secure.middlewares=hello-world-strip
+      - traefik.http.routers.hello-world-web.rule=Host(`${RELAYKIT_HOST}`) && PathPrefix(`/apps/hello-world`)
+      - traefik.http.routers.hello-world-web.priority=200
+      - traefik.http.routers.hello-world-web.entrypoints=web
+      - traefik.http.routers.hello-world-web.middlewares=relaykit-redirect
+      - traefik.http.middlewares.hello-world-strip.stripprefix.prefixes=/apps/hello-world
+      - traefik.http.services.hello-world.loadbalancer.server.port=3100
+    networks:
+      default: null
+      dokploy-network: null
+      relaykit-network: null
+    profiles:
+      - prod
+    restart: unless-stopped
+    volumes:
+      - source: hello_world_data
+        target: /data
+        type: volume
+        volume: {}
+  relaykit-prod:
+    command:
+      - sh
+      - -c
+      - cd /app/backend && yarn start
+    depends_on:
+      dokploy:
+        condition: service_started
+        required: true
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - JWT_SECRET=${JWT_SECRET}
+      - RELAYKIT_HOST=${RELAYKIT_HOST:-}
+    image: ${RELAYKIT_IMAGE:-ghcr.io/samthomson/relaykit:stable}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.relaykit-secure.rule=Host(`${RELAYKIT_HOST}`)
+      - traefik.http.routers.relaykit-secure.priority=100
+      - traefik.http.routers.relaykit-secure.entrypoints=websecure
+      - traefik.http.routers.relaykit-secure.tls.certresolver=letsencrypt
+      - traefik.http.routers.relaykit-web.rule=Host(`${RELAYKIT_HOST}`)
+      - traefik.http.routers.relaykit-web.priority=100
+      - traefik.http.routers.relaykit-web.entrypoints=web
+      - traefik.http.routers.relaykit-web.middlewares=relaykit-redirect
+      - traefik.http.middlewares.relaykit-redirect.redirectscheme.scheme=https
+      - traefik.http.routers.relaykit.rule=PathPrefix(`/`)
+      - traefik.http.routers.relaykit.priority=1
+      - traefik.http.routers.relaykit.entrypoints=web,websecure
+      - traefik.http.services.relaykit.loadbalancer.server.port=4000
+    networks:
+      default: null
+      relaykit-network: null
+    profiles:
+      - prod
+    restart: unless-stopped
+    volumes:
+      - source: relaykit_data
+        target: /app/.relaykit
+        type: volume
+        volume: {}
+      - bind:
+          create_host_path: true
+        read_only: true
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        type: bind
+volumes:
+  dokploy_data: {}
+  hello_world_data: {}
+  postgres_data: {}
+  redis_data: {}
+  relaykit_data: {}

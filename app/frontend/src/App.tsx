@@ -5,6 +5,7 @@ import { useAuth } from './contexts/AuthContext';
 import { useDokploy } from './contexts/DokployContext';
 import { useRefreshServices } from './contexts/RefreshServicesContext';
 import { InsightsPage } from './components/InsightsPage';
+import { RelaykitVersionPanel } from './components/RelaykitVersionPanel';
 import { AccountModal } from './components/AccountModal';
 import { NavServerSummary } from './components/NavServerSummary';
 import { DebugPage } from './pages/DebugPage';
@@ -222,6 +223,7 @@ const App = () => {
           </AppShell.Section>
           <AppShell.Section>
             <NavServerSummary />
+            <RelaykitVersionPanel />
           </AppShell.Section>
         </AppShell.Navbar>
 

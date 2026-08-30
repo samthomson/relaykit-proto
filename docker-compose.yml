@@ -32,7 +32,8 @@ services:
       retries: 5
 
   dokploy:
-    image: dokploy/dokploy:latest
+    # Pinned per relaykit release (see app/version.json); bump deliberately with release testing.
+    image: dokploy/dokploy:v0.30.2
     restart: unless-stopped
     ports:
       - "3020:3000"
@@ -147,7 +148,7 @@ services:
 
   relaykit-prod:
     profiles: ["prod"]
-    image: ${RELAYKIT_IMAGE:-ghcr.io/samthomson/relaykit:latest}
+    image: ${RELAYKIT_IMAGE:-ghcr.io/samthomson/relaykit:stable}
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -185,9 +186,7 @@ services:
 
   hello-world:
     profiles: ["prod"]
-    build:
-      context: .
-      dockerfile: app/apps/hello-world/Dockerfile
+    image: ${HELLO_WORLD_IMAGE:-ghcr.io/samthomson/relaykit-hello-world:stable}
     restart: unless-stopped
     volumes:
       - hello_world_data:/data
