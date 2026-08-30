@@ -1,5 +1,5 @@
 {
-  "version": "0.1.1",
+  "version": "0.2.0",
   "dokployVersion": "0.30.2",
-  "notes": "refreshed update dialog: release notes, status badges"
+  "notes": "handle degraded services & smoother udpates"
 }
