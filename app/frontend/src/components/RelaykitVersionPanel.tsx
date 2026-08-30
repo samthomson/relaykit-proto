@@ -38,14 +38,16 @@ export const RelaykitVersionPanel = () => {
     }
   }, [loadCheck])
 
-  // After the update starts the old backend dies mid-recreate; poll until the new one answers, then reload.
+  // After the update starts the old backend dies mid-recreate; poll until the new one is up AND
+  // dokploy answers, then land on home (deep links can 404 during the swap window).
   const waitForBackend = useCallback(() => {
     // Give compose a moment to tear the old container down before polling for the new one.
     window.setTimeout(() => {
       pollRef.current = window.setInterval(async () => {
         try {
           await trpc.getRelaykitVersion.query()
-          window.location.reload()
+          const dokploy = await trpc.checkDokploy.query()
+          if (dokploy.reachable) window.location.assign('/')
         } catch {
           // still down (or old container mid-shutdown) — keep waiting
         }
@@ -54,16 +56,19 @@ export const RelaykitVersionPanel = () => {
   }, [])
 
   const startUpdate = useCallback(async () => {
+    if (updating) return
+    // Optimistic: the overlay must appear instantly so a slow response never invites a second click.
+    setUpdating(true)
+    setModalOpen(false)
     setUpdateError(null)
     try {
       await trpc.updateRelaykit.mutate()
-      setUpdating(true)
-      setModalOpen(false)
       waitForBackend()
     } catch (e) {
+      setUpdating(false)
       setUpdateError(e instanceof Error ? e.message : 'update failed to start')
     }
-  }, [waitForBackend])
+  }, [updating, waitForBackend])
 
   if (!check) return null
 
