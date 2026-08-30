@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { inferRouterOutputs } from '@trpc/server'
 import type { AppRouter } from '../../../backend/src/trpc'
-import { Badge, Group, Modal, Overlay, Paper, SegmentedControl, Stack, Text, Button, Center, Loader, Tooltip } from '@mantine/core'
-import { IconArrowUp } from '@tabler/icons-react'
+import { Badge, Button, Center, Collapse, Group, Loader, Modal, Overlay, Paper, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
+import { IconAlertCircle, IconArrowUp, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react'
 import { trpc } from '../trpc'
 
 type RouterOutputs = inferRouterOutputs<AppRouter>
@@ -20,6 +20,7 @@ export const RelaykitVersionPanel = () => {
   const [updating, setUpdating] = useState(false)
   const [updateError, setUpdateError] = useState<string | null>(null)
   const [channelSwitching, setChannelSwitching] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
   const pollRef = useRef<number | null>(null)
 
   const loadCheck = useCallback(async () => {
@@ -94,11 +95,20 @@ export const RelaykitVersionPanel = () => {
         <Stack gap="sm">
           <Group justify="space-between" align="flex-start">
             <Text size="sm" c="dimmed">current</Text>
-            <Stack gap={2} align="flex-end">
-              <Text size="sm">v{check.current.version}</Text>
-              <Text size="xs" c="dimmed" ml="md">dokploy {check.current.dokployVersion}</Text>
+            <Stack gap={4} align="flex-end">
+              <Text size="sm" fw={600}>v{check.current.version}</Text>
+              {check.current.notes ? (
+                <Button variant="subtle" size="compact-xs" p={0} h="auto" onClick={() => setNotesOpen((o) => !o)}>
+                  {notesOpen ? 'hide release notes' : 'release notes'}
+                </Button>
+              ) : null}
             </Stack>
           </Group>
+          <Collapse in={notesOpen}>
+            <Paper withBorder p="sm">
+              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{check.current.notes}</Text>
+            </Paper>
+          </Collapse>
           {check.updateCheckSupported ? (
             <>
               <Group justify="space-between">
@@ -141,16 +151,25 @@ export const RelaykitVersionPanel = () => {
                   </Group>
                 </>
               ) : check.error ? (
-                <Text size="sm" c="dimmed">
-                  couldn't check for updates right now
-                  {check.error ? <Tooltip label={check.error} withArrow><Text component="span" size="xs" c="dimmed" style={{ textDecoration: 'underline dotted' }}> (details)</Text></Tooltip> : null}
-                </Text>
+                <Group justify="flex-end">
+                  <Badge size="sm" variant="light" color="orange" leftSection={<IconAlertCircle size={12} />}>
+                    couldn't check for updates
+                  </Badge>
+                </Group>
               ) : (
-                <Text size="sm" c="dimmed">up to date</Text>
+                <Group justify="flex-end">
+                  <Badge size="sm" variant="light" color="teal" leftSection={<IconCircleCheck size={12} />}>
+                    up to date
+                  </Badge>
+                </Group>
               )}
             </>
           ) : (
-            <Text size="sm" c="dimmed">updates aren't available on this instance</Text>
+            <Group justify="flex-end">
+              <Badge size="sm" variant="light" color="gray" leftSection={<IconInfoCircle size={12} />}>
+                updates unavailable on this instance
+              </Badge>
+            </Group>
           )}
           {updateError ? (
             <Text size="sm" c="red">{updateError}</Text>
