@@ -5,7 +5,7 @@
 
 # TOP PRIORITY: RESPONSE LENGTH (NON-NEGOTIABLE)
 - Keep responses very short by default: 1-4 sentences.
-- Do not provide background, caveats, or extra context unless explicitly asked.
+- Use as few sentences as possible unless explicitly asked to go into detail. Terse fragments > full sentences.
 - Do not restate the question.
 - Prefer direct yes/no + one-line reason when possible.
 - For implementation updates, use at most 3 bullets.
