@@ -25,6 +25,7 @@ import {
   compareVersions,
   fetchRemoteImageVersion,
   getOwnImageRef,
+  isRegistryRef,
   readRelaykitVersion,
   readUpdateChannel,
   startSelfUpdate,
@@ -1461,14 +1462,13 @@ export const appRouter = router({
       const imageRef = await getOwnImageRef()
       let latest: RemoteVersion | null = null
       let error: string | null = null
-      if (imageRef) {
+      const updateCheckSupported = isRegistryRef(imageRef)
+      if (updateCheckSupported && imageRef) {
         try {
           latest = await fetchRemoteImageVersion(imageRef, channel)
         } catch (e: unknown) {
           error = e instanceof Error ? e.message : 'failed to reach image registry'
         }
-      } else {
-        error = 'no docker socket or not running in a container; update check skipped'
       }
       return {
         current,
@@ -1477,6 +1477,7 @@ export const appRouter = router({
         imageRef,
         latest,
         updateAvailable: !!latest && compareVersions(latest.version, current.version) > 0,
+        updateCheckSupported,
         error,
       }
     }),

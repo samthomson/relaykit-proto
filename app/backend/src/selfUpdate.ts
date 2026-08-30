@@ -77,13 +77,18 @@ const parseImageRef = (ref: string): { registry: string; repo: string; tag: stri
   return { registry, repo, tag }
 }
 
+/** True when the ref is registry-backed (host with dot/port) — i.e. update checks are possible. */
+export const isRegistryRef = (ref: string | null): boolean => !!ref && parseImageRef(ref) !== null
+
 /** Read the version/notes labels off a remote image manifest (anonymous pull; works for public GHCR). */
 export const fetchRemoteImageVersion = async (
   ref: string,
   tagOverride?: string,
 ): Promise<RemoteVersion | null> => {
   const parsed = parseImageRef(ref)
-  if (!parsed) return null
+  if (!parsed) {
+    throw new Error(`image "${ref}" is not from a registry; update checks need a registry-deployed image`)
+  }
   const { registry, repo } = parsed
   const tag = tagOverride ?? parsed.tag
   const base = `https://${registry}`
@@ -100,7 +105,9 @@ export const fetchRemoteImageVersion = async (
       'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json',
   }
   const manifestRes = await fetch(`${base}/v2/${repo}/manifests/${tag}`, { headers: manifestHeaders, signal: timeout })
-  if (!manifestRes.ok) throw new Error(`registry manifest request failed: ${manifestRes.status}`)
+  if (!manifestRes.ok) {
+    throw new Error(manifestRes.status === 404 ? `no image published for ${repo}:${tag} yet` : `registry manifest request failed: ${manifestRes.status}`)
+  }
   let manifest = await manifestRes.json()
   // Multi-platform tags return an index; resolve the amd64 (server) entry before reading config.
   if (Array.isArray(manifest?.manifests)) {
@@ -117,7 +124,7 @@ export const fetchRemoteImageVersion = async (
   const config = await configRes.json()
   const labels = config?.config?.Labels || {}
   const version = String(labels['org.opencontainers.image.version'] || '').trim()
-  if (!version) return null
+  if (!version) throw new Error(`no version label on ${repo}:${tag} (image built from an old CI config?)`)
   return { version, notes: String(labels['org.opencontainers.image.description'] || '').trim() }
 }
 

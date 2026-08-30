@@ -11,7 +11,7 @@ type UpdateCheck = RouterOutputs['checkRelaykitUpdate']
 /**
  * Version + self-update surface for the relaykit stack.
  * - navbar row: current version (dokploy engine pin in tooltip), badge when an update is available
- * - modal: latest version + notes, update button
+ * - modal: channel picker (stable/beta), latest version + notes, update button
  * - after update starts: overlay + poll until the backend is back, then reload
  */
 export const RelaykitVersionPanel = () => {
@@ -19,6 +19,7 @@ export const RelaykitVersionPanel = () => {
   const [modalOpen, setModalOpen] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [updateError, setUpdateError] = useState<string | null>(null)
+  const [channelSwitching, setChannelSwitching] = useState(false)
   const pollRef = useRef<number | null>(null)
 
   const loadCheck = useCallback(async () => {
@@ -91,50 +92,65 @@ export const RelaykitVersionPanel = () => {
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title="relaykit" size="md" centered>
         <Stack gap="sm">
-          <Group justify="space-between">
+          <Group justify="space-between" align="flex-start">
             <Text size="sm" c="dimmed">current</Text>
-            <Group gap={6} wrap="nowrap">
+            <Stack gap={2} align="flex-end">
               <Text size="sm">v{check.current.version}</Text>
-              <Text size="xs" c="dimmed">dokploy {check.current.dokployVersion}</Text>
-            </Group>
+              <Text size="xs" c="dimmed" ml="md">dokploy {check.current.dokployVersion}</Text>
+            </Stack>
           </Group>
-          <Group justify="space-between">
-            <Text size="sm" c="dimmed">channel</Text>
-            <SegmentedControl
-              size="xs"
-              value={check.channel}
-              data={(check.channels ?? ['stable']).map((c) => ({ value: c, label: c }))}
-              onChange={(value) => {
-                void (async () => {
-                  await trpc.setUpdateChannel.mutate({ channel: value as 'stable' | 'beta' })
-                  await loadCheck()
-                })()
-              }}
-            />
-          </Group>
-          {check.updateAvailable && check.latest ? (
+          {check.updateCheckSupported ? (
             <>
               <Group justify="space-between">
-                <Text size="sm" c="dimmed">available</Text>
-                <Text size="sm" fw={600}>v{check.latest.version}</Text>
+                <Text size="sm" c="dimmed">channel</Text>
+                <SegmentedControl
+                  size="xs"
+                  disabled={channelSwitching}
+                  value={check.channel}
+                  data={(check.channels ?? ['stable']).map((c: string) => ({ value: c, label: c }))}
+                  onChange={(value) => {
+                    void (async () => {
+                      setChannelSwitching(true)
+                      try {
+                        await trpc.setUpdateChannel.mutate({ channel: value as 'stable' | 'beta' })
+                        await loadCheck()
+                      } finally {
+                        setChannelSwitching(false)
+                      }
+                    })()
+                  }}
+                />
               </Group>
-              {check.latest.notes ? (
-                <Paper withBorder p="sm">
-                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{check.latest.notes}</Text>
-                </Paper>
-              ) : null}
-              <Text size="xs" c="dimmed">
-                updates the whole stack: relaykit + dokploy + traefik. your services stay online;
-                the dashboard restarts (~a minute).
-              </Text>
-              <Group justify="flex-end">
-                <Button size="sm" onClick={startUpdate}>update to v{check.latest.version}</Button>
-              </Group>
+              {check.updateAvailable && check.latest ? (
+                <>
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">available</Text>
+                    <Text size="sm" fw={600}>v{check.latest.version}</Text>
+                  </Group>
+                  {check.latest.notes ? (
+                    <Paper withBorder p="sm">
+                      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{check.latest.notes}</Text>
+                    </Paper>
+                  ) : null}
+                  <Text size="xs" c="dimmed">
+                    updates the whole stack: relaykit + dokploy + traefik. your services stay online;
+                    the dashboard restarts (~a minute).
+                  </Text>
+                  <Group justify="flex-end">
+                    <Button size="sm" onClick={startUpdate}>update to v{check.latest.version}</Button>
+                  </Group>
+                </>
+              ) : check.error ? (
+                <Text size="sm" c="dimmed">
+                  couldn't check for updates right now
+                  {check.error ? <Tooltip label={check.error} withArrow><Text component="span" size="xs" c="dimmed" style={{ textDecoration: 'underline dotted' }}> (details)</Text></Tooltip> : null}
+                </Text>
+              ) : (
+                <Text size="sm" c="dimmed">up to date</Text>
+              )}
             </>
           ) : (
-            <Text size="sm" c="dimmed">
-              {check.error ? `update check unavailable: ${check.error}` : 'up to date'}
-            </Text>
+            <Text size="sm" c="dimmed">updates aren't available on this instance</Text>
           )}
           {updateError ? (
             <Text size="sm" c="red">{updateError}</Text>
