@@ -28,8 +28,10 @@ COMPOSE_DOKPLOY=$(grep -oE 'dokploy/dokploy:v[0-9.]+' docker-compose.yml | head 
 [[ "$COMPOSE_DOKPLOY" == "$DOKPLOY_VERSION" ]] || fail "dokploy pin mismatch: compose has v$COMPOSE_DOKPLOY, version.json says $DOKPLOY_VERSION"
 
 # Tag must be new (and must not already exist on the remote).
-if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-  fail "tag $TAG already exists on origin"
+REMOTE=$(git remote | grep -x origin || git remote | head -1)
+[[ -n "$REMOTE" ]] || fail "no git remote configured"
+if git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$TAG" >/dev/null 2>&1; then
+  fail "tag $TAG already exists on $REMOTE"
 fi
 
 # Regenerate the baked stack definition; require a clean diff afterwards.
@@ -41,11 +43,15 @@ if $CHECK_ONLY; then
 fi
 
 git add app/version.json app/release.yml
-git commit -m "release $TAG
+if git diff --cached --quiet; then
+  echo "nothing new to commit (version.json already committed); tagging current tree"
+else
+  git commit -m "release $TAG
 
-$NOTES" || fail "nothing to commit — did you bump version.json?"
+$NOTES"
+fi
 git tag -a "$TAG" -m "relaykit $TAG
 
 $NOTES"
-git push origin HEAD --follow-tags
+git push "$REMOTE" HEAD --follow-tags
 echo "released $TAG — CI will build and publish the stable channel"
