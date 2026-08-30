@@ -930,12 +930,40 @@ export const appRouter = router({
       for (const environment of project.environments || []) {
         for (const compose of environment.compose || []) {
           const presetId = compose.description
-          if (!presetId) throw new Error(`Service ${compose.name} has no preset ID`)
+          if (!presetId) {
+            // Legacy services deployed by old relaykit versions carry no preset id; degrade to a
+            // broken card instead of failing the whole services list.
+            services.push({
+              composeId: compose.composeId,
+              name: compose.name,
+              presetId: null,
+              serviceType: 'unknown',
+              status: 'error',
+              createdAt: compose.createdAt,
+              hostname: compose.domains?.[0]?.host || 'No hostname configured',
+              domains: compose.domains || [],
+              projectId: project.projectId,
+              projectName: project.name,
+              environmentId: environment.environmentId,
+              environmentName: environment.name,
+              type: null,
+              canEditConfig: false,
+              whitelistedPubkeys: [],
+              whitelistedKinds: [],
+              blacklistedKinds: [],
+              requireNip42: false,
+              repo: undefined,
+              icon: '⚠',
+              brokenPreset: true,
+              brokenPresetReason: 'deployed by an older relaykit, no preset id recorded',
+            })
+            continue
+          }
           let presetData: PresetMetadata
           try {
             presetData = await getPresetMetadata(presetId)
           } catch (error: any) {
-            const brokenReason = `Missing preset metadata for "${presetId}": ${error?.message || 'unknown error'}`
+            const brokenReason = `Missing preset metadata for "${presetId}": ${error?.message || 'unknown'}`
             console.warn(`Marking compose ${compose.composeId} (${compose.name}) as broken: ${brokenReason}`)
             services.push({
               composeId: compose.composeId,
