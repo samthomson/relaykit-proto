@@ -25,7 +25,7 @@ fi
 
 if [[ -z "$DEPLOY_PATH" ]]; then
   echo "Error: DEPLOY_PATH is not set (path to repo on remote server)."
-  echo "  export DEPLOY_PATH=/root/relaykit-proto"
+  echo "  export DEPLOY_PATH=/root/relaykit"
   exit 1
 fi
 

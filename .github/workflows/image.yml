@@ -85,10 +85,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Needed to cross-build the arm64 layer (e.g. for local dev on apple silicon) on this amd64 runner.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -115,9 +111,7 @@ jobs:
           context: .
           file: app/apps/notif-hub/Dockerfile
           push: true
-          # amd64 for the prod server, arm64 so it also pulls on apple silicon dev machines.
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -127,9 +121,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -159,7 +150,7 @@ jobs:
           context: .
           file: app/apps/hello-world/Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

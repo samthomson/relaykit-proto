@@ -33,13 +33,13 @@ done
 if [[ -z "$DEPLOY_HOST" ]]; then
   echo "Error: DEPLOY_HOST is not set."
   echo "  export DEPLOY_HOST=your-server   # or use an SSH alias from ~/.ssh/config"
-  echo "  export DEPLOY_PATH=/path/to/relaykit-proto   # path on the remote server"
+  echo "  export DEPLOY_PATH=/path/to/relaykit   # path on the remote server"
   exit 1
 fi
 
 if [[ -z "$DEPLOY_PATH" ]]; then
   echo "Error: DEPLOY_PATH is not set (path to repo on remote server)."
-  echo "  export DEPLOY_PATH=/root/relaykit-proto   # example"
+  echo "  export DEPLOY_PATH=/root/relaykit   # example"
   exit 1
 fi
 
