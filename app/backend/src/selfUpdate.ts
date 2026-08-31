@@ -7,6 +7,7 @@ import {
   RELAYKIT_UPDATE_CHANNEL_DEFAULT,
   RELAYKIT_UPDATE_CHANNELS,
   RELAYKIT_UPDATE_HELPER_IMAGE,
+  CHANGELOG_PATH,
   VERSION_FILE_PATH,
   type RelaykitUpdateChannel,
 } from './constants'
@@ -20,6 +21,15 @@ export const readRelaykitVersion = async (): Promise<RelaykitVersion> => {
     version: String(parsed.version || 'unknown'),
     dokployVersion: String(parsed.dokployVersion || 'unknown'),
     notes: String(parsed.notes || ''),
+  }
+}
+
+/** Baked-in changelog (history up to the running version); null when absent (e.g. old images). */
+export const readChangelog = async (): Promise<string | null> => {
+  try {
+    return await fs.readFile(CHANGELOG_PATH, 'utf-8')
+  } catch {
+    return null
   }
 }
 

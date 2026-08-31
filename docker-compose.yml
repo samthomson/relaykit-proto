@@ -138,6 +138,7 @@ services:
       - dev_nm_hello_world:/app/apps/hello-world/node_modules
       - dev_nm_notif_hub:/app/apps/notif-hub/node_modules
       - relaykit_data:/app/.relaykit
+      - ./CHANGELOG.md:/app/CHANGELOG.md:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - default

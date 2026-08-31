@@ -23,6 +23,7 @@ import {
 } from './dockerSocket'
 import {
   compareVersions,
+  readChangelog,
   fetchRemoteImageVersion,
   getOwnImageRef,
   isRegistryRef,
@@ -1482,6 +1483,7 @@ export const appRouter = router({
         latest,
         updateAvailable: !!latest && compareVersions(latest.version, current.version) > 0,
         updateCheckSupported,
+        changelog: await readChangelog(),
         error,
       }
     }),

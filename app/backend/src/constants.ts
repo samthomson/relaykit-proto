@@ -6,6 +6,7 @@ export const DOKPLOY_URL = 'http://dokploy:3000'
 export const PRESETS_DIR = path.join('/app', 'presets')
 export const DEFAULT_PROJECT_NAME = 'relaykit.ungrouped'
 export const VERSION_FILE_PATH = '/app/version.json'
+export const CHANGELOG_PATH = '/app/CHANGELOG.md'
 /** Update channels: moving image tags. master builds move beta; vX.Y.Z releases move stable. */
 export const RELAYKIT_UPDATE_CHANNELS = ['stable', 'beta'] as const
 export type RelaykitUpdateChannel = (typeof RELAYKIT_UPDATE_CHANNELS)[number]

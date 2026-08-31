@@ -33,6 +33,20 @@ REMOTE=$(git remote | grep -x origin || git remote | head -1)
 if git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$TAG" >/dev/null 2>&1; then
   fail "tag $TAG already exists on $REMOTE"
 fi
+# Keep CHANGELOG.md in sync: the release entry must be the newest one in the file.
+DATE=$(date +%F)
+CHANGELOG_ENTRY="## $VERSION — $DATE"
+if ! head -3 CHANGELOG.md | grep -qF "$CHANGELOG_ENTRY"; then
+  if $CHECK_ONLY; then
+    fail "CHANGELOG.md has no entry for $VERSION ($CHANGELOG_ENTRY) — add it or run the full release"
+  fi
+  # Prepend the entry right after the "# changelog" heading.
+  TMP=$(mktemp)
+  printf '# changelog\n\n%s\n%s\n' "$CHANGELOG_ENTRY" "$NOTES" > "$TMP"
+  tail -n +2 CHANGELOG.md >> "$TMP"
+  mv "$TMP" CHANGELOG.md
+  echo "prepended changelog entry: $CHANGELOG_ENTRY"
+fi
 
 # Regenerate the baked stack definition; require a clean diff afterwards.
 ./scripts/gen-release-yml.sh
@@ -42,7 +56,7 @@ if $CHECK_ONLY; then
   exit 0
 fi
 
-git add app/version.json app/release.yml
+git add app/version.json app/release.yml CHANGELOG.md
 if git diff --cached --quiet; then
   echo "nothing new to commit (version.json already committed); tagging current tree"
 else

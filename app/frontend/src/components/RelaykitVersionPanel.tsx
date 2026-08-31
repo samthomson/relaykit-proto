@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { inferRouterOutputs } from '@trpc/server'
 import type { AppRouter } from '../../../backend/src/trpc'
 import { RubixLoader, RubixLoaderColor } from '@samthomson/rubix-loader'
-import { Badge, Button, Collapse, Group, Modal, Paper, SegmentedControl, Stack, Text } from '@mantine/core'
+import { Badge, Button, Collapse, Group, Modal, Paper, ScrollArea, SegmentedControl, Stack, Text } from '@mantine/core'
 import { IconAlertCircle, IconArrowUp, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react'
 import { trpc } from '../trpc'
 
@@ -152,13 +152,15 @@ export const RelaykitVersionPanel = () => {
                 />
               ) : null}
             </Group>
-            {check.current.notes ? (
+            {check.changelog ? (
               <>
                 <Button variant="subtle" size="compact-xs" p={0} h="auto" style={{ width: 'fit-content' }} onClick={() => setNotesOpen((o) => !o)}>
-                  {notesOpen ? 'hide release notes' : 'release notes'}
+                  {notesOpen ? 'hide changelog' : 'changelog'}
                 </Button>
                 <Collapse in={notesOpen}>
-                  <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>{check.current.notes}</Text>
+                  <ScrollArea.Autosize mah={220} type="hover" offsetScrollbars>
+                    <Text size="xs" ff="monospace" c="dimmed" style={{ whiteSpace: 'pre-wrap' }} py={4}>{check.changelog}</Text>
+                  </ScrollArea.Autosize>
                 </Collapse>
               </>
             ) : null}
