@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
 import { LineChart } from '@mantine/charts';
 import { Badge, Group, Paper, Progress, SimpleGrid, Stack, Text, rem } from '@mantine/core';
 import { IconAlertOctagon, IconAlertTriangle, IconCircleCheck } from '@tabler/icons-react';
 import { RubixLoader, RubixLoaderColor } from '@samthomson/rubix-loader';
-import { trpc } from '../trpc';
+import { useInsights } from '../contexts/InsightsContext';
 import {
   formatBytes,
   formatPercent,
@@ -16,39 +15,9 @@ import {
 } from '../../../shared/insights';
 
 export const InsightsPage = () => {
-  const [insights, setInsights] = useState<Awaited<ReturnType<typeof trpc.getServerInsights.query>> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { insights, error } = useInsights();
 
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const next = await trpc.getServerInsights.query();
-        if (!mounted) return;
-        setInsights(next);
-        setError(null);
-      } catch (e: any) {
-        if (!mounted) return;
-        setError(e?.message || 'Could not load server insights');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    void load();
-    const poll = window.setInterval(() => {
-      void load();
-    }, 5000);
-
-    return () => {
-      mounted = false;
-      window.clearInterval(poll);
-    };
-  }, []);
-
-  if (loading && !insights) {
+  if (!insights && !error) {
     return (
       <Stack align="center" justify="center" gap="sm" p="xl" style={{ minHeight: rem(480) }}>
         <RubixLoader size={144} colors={[RubixLoaderColor.RelayKit]} speed={1.35} />

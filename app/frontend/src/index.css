@@ -90,3 +90,18 @@ body {
   color: #8a2f3b !important;
   border-color: var(--mantine-color-red-6) !important;
 }
+
+/* System status banner: fixed full-width above the appshell when server metrics go warn/critical */
+.rk-banner {
+  border-bottom: 1px solid transparent;
+}
+
+.rk-banner-critical {
+  background: var(--mantine-color-red-7) !important;
+  color: #fff !important;
+}
+
+.rk-banner-warn {
+  background: var(--mantine-color-yellow-5) !important;
+  color: #233 !important;
+}

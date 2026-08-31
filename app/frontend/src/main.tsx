@@ -10,6 +10,7 @@ import { Toaster } from 'sonner';
 import { buildRelaykitTheme } from '@relaykit/ui';
 import { AuthProvider } from './contexts/AuthContext';
 import { DokployProvider } from './contexts/DokployContext';
+import { InsightsProvider } from './contexts/InsightsContext';
 import { RefreshServicesProvider } from './contexts/RefreshServicesContext';
 
 const theme = buildRelaykitTheme();
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <DokployProvider>
           <RefreshServicesProvider>
+            <InsightsProvider>
             <Notifications position="top-right" />
             <Toaster
               position="top-right"
@@ -60,6 +62,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               }}
             />
             <App />
+            </InsightsProvider>
           </RefreshServicesProvider>
         </DokployProvider>
       </AuthProvider>

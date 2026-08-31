@@ -1,7 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Box, Group, Paper, Text, Tooltip } from '@mantine/core'
-import { IconCpu, IconDatabase, IconServer } from '@tabler/icons-react'
-import { trpc } from '../trpc'
+import { type ReactNode } from 'react'
+import { Badge, Box, Group, Paper, Text, Tooltip } from '@mantine/core'
+import { IconAlertOctagon, IconAlertTriangle, IconCpu, IconDatabase, IconServer } from '@tabler/icons-react'
+import { useInsights } from '../contexts/InsightsContext'
+import { getInsightSeverity, getOverallSeverity, type InsightSeverity } from '../../../shared/insights'
+import { demoServerSeverity } from './SystemStatusBanner'
 
 const formatPercentRounded = (value: number | null): string => {
   if (value === null || !Number.isFinite(value)) return '—'
@@ -38,50 +40,47 @@ const InlineMetric = ({ label, value, icon }: { label: string; value: string; ic
 )
 
 export const NavServerSummary = () => {
-  const [insights, setInsights] = useState<Awaited<ReturnType<typeof trpc.getServerInsights.query>> | null>(null)
-
-  useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      try {
-        const next = await trpc.getServerInsights.query()
-        if (!mounted) return
-        setInsights(next)
-      } catch {
-        // Keep nav quiet if insights endpoint is unavailable.
-      }
-    }
-
-    void load()
-    const poll = window.setInterval(() => {
-      void load()
-    }, 10000)
-    return () => {
-      mounted = false
-      window.clearInterval(poll)
-    }
-  }, [])
+  const { insights } = useInsights()
 
   if (!insights) return null
+  const { current, thresholds } = insights
+  const severity: InsightSeverity = demoServerSeverity() ?? getOverallSeverity([
+    getInsightSeverity(current.cpuPct, thresholds.cpu.warn, thresholds.cpu.critical),
+    getInsightSeverity(current.memoryUsedPct, thresholds.memory.warn, thresholds.memory.critical),
+    getInsightSeverity(current.diskUsedPct, thresholds.disk.warn, thresholds.disk.critical),
+  ])
+
   return (
     <Paper withBorder p="xs" mt="sm">
-      <Text size="xs" fw={600} mb={4}>server</Text>
+      <Group gap={6} mb={4} wrap="nowrap">
+        <Text size="xs" fw={600}>server</Text>
+        {severity !== 'normal' && (
+          <Badge
+            variant="filled"
+            size="xs"
+            color={severity === 'critical' ? 'red' : 'yellow'}
+            leftSection={severity === 'critical' ? <IconAlertOctagon size={12} /> : <IconAlertTriangle size={12} />}
+          >
+            {severity === 'critical' ? 'critical' : 'warning'}
+          </Badge>
+        )}
+      </Group>
       <Group gap={8} wrap="nowrap">
         <InlineMetric
-          label={`CPU usage: ${formatPercentRounded(insights.current.cpuPct)} (load ${Math.round(insights.current.load1)}/${Math.round(insights.current.load5)}/${Math.round(insights.current.load15)})`}
-          value={formatPercentRounded(insights.current.cpuPct)}
+          label={`CPU usage: ${formatPercentRounded(current.cpuPct)} (load ${Math.round(current.load1)}/${Math.round(current.load5)}/${Math.round(current.load15)})`}
+          value={formatPercentRounded(current.cpuPct)}
           icon={<IconCpu size={12} />}
         />
         <Text size="xs" c="gray.5">•</Text>
         <InlineMetric
-          label={`Memory usage: ${formatBytesRounded(insights.current.memoryUsedBytes)} / ${formatBytesRounded(insights.current.memoryTotalBytes)} (${formatPercentRounded(insights.current.memoryUsedPct)})`}
-          value={formatBytesRounded(insights.current.memoryUsedBytes)}
+          label={`Memory usage: ${formatBytesRounded(current.memoryUsedBytes)} / ${formatBytesRounded(current.memoryTotalBytes)} (${formatPercentRounded(current.memoryUsedPct)})`}
+          value={formatBytesRounded(current.memoryUsedBytes)}
           icon={<IconServer size={12} />}
         />
         <Text size="xs" c="gray.5">•</Text>
         <InlineMetric
-          label={`Disk usage: ${formatPercentRounded(insights.current.diskUsedPct)} (${formatBytesRounded(insights.current.diskUsedBytes)} / ${formatBytesRounded(insights.current.diskTotalBytes)})`}
-          value={formatBytesRounded(insights.current.diskUsedBytes)}
+          label={`Disk usage: ${formatPercentRounded(current.diskUsedPct)} (${formatBytesRounded(current.diskUsedBytes)} / ${formatBytesRounded(current.diskTotalBytes)})`}
+          value={formatBytesRounded(current.diskUsedBytes)}
           icon={<IconDatabase size={12} />}
         />
       </Group>

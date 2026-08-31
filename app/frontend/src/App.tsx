@@ -4,6 +4,7 @@ import { RubixLoader, RubixLoaderColor } from '@samthomson/rubix-loader';
 import { useAuth } from './contexts/AuthContext';
 import { useDokploy } from './contexts/DokployContext';
 import { useRefreshServices } from './contexts/RefreshServicesContext';
+import { APPSHELL_BANNER_STYLES, SystemStatusBanner } from './components/SystemStatusBanner';
 import { InsightsPage } from './components/InsightsPage';
 import { RelaykitVersionPanel } from './components/RelaykitVersionPanel';
 import { AccountModal } from './components/AccountModal';
@@ -130,6 +131,7 @@ const App = () => {
         header={{ height: 60 }}
         navbar={{ width: 220, breakpoint: 'sm', collapsed: { mobile: !mobileMenuOpened } }}
         padding="md"
+        styles={APPSHELL_BANNER_STYLES}
       >
         <AppShell.Header>
           <Group h="100%" px="md" justify="space-between">
@@ -237,6 +239,7 @@ const App = () => {
         </AppShell.Main>
       </AppShell>
 
+      <SystemStatusBanner />
       <AccountModal opened={accountModalOpen} onClose={closeAccountModal} />
     </BrowserRouter>
   );
