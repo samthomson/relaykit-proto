@@ -1,5 +1,8 @@
 # changelog
 
+## 0.2.4 — 2026-08-31
+in-app changelog
+
 ## 0.2.3 — 2026-08-31
 hello-world: ui fix when reusing a post with images
 
