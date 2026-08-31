@@ -1,5 +1,5 @@
 {
-  "version": "0.2.5",
+  "version": "0.3.0",
   "dokployVersion": "0.30.2",
-  "notes": "fix self-update: bake release.yml into the image (0.2.4's update failed on a missing file)"
+  "notes": "insights: warn/critical results now show a top-level banner; changelog fixes"
 }

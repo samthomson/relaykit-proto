@@ -1,5 +1,8 @@
 # changelog
 
+## 0.3.0 — 2026-09-01
+insights: warn/critical results now show a top-level banner; changelog fixes
+
 ## 0.2.5 — 2026-08-31
 fix self-update: bake release.yml into the image (0.2.4's update failed on a missing file)
 
