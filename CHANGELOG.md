@@ -1,5 +1,8 @@
 # changelog
 
+## 0.2.5 — 2026-08-31
+fix self-update: bake release.yml into the image (0.2.4's update failed on a missing file)
+
 ## 0.2.4 — 2026-08-31
 in-app changelog
 
