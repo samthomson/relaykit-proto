@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { inferRouterOutputs } from '@trpc/server'
 import type { AppRouter } from '../../../backend/src/trpc'
 import { RubixLoader, RubixLoaderColor } from '@samthomson/rubix-loader'
-import { Badge, Button, Collapse, Group, Modal, Paper, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
+import { Badge, Button, Collapse, Group, Modal, Paper, SegmentedControl, Stack, Text } from '@mantine/core'
 import { IconAlertCircle, IconArrowUp, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react'
 import { trpc } from '../trpc'
 
@@ -86,7 +86,6 @@ export const RelaykitVersionPanel = () => {
 
   return (
     <>
-      <Tooltip label={`dokploy engine ${check.current.dokployVersion}`} withArrow position="right">
         <Paper
           withBorder
           p="xs"
@@ -106,7 +105,6 @@ export const RelaykitVersionPanel = () => {
             ) : null}
           </Group>
         </Paper>
-      </Tooltip>
 
       <Modal
         opened={modalOpen}
