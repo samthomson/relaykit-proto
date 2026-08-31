@@ -38,11 +38,12 @@ import {
 } from '@/lib/datetime'
 import { dedupeRelays, parseParams } from '@/lib/queryParams'
 import { compressImage } from '@/lib/compressImage'
-
+import { extractImages, stripImageUrls } from '@/lib/images'
 interface Attachment {
   id: string
-  file: File
-  originalSize: number
+  /** Absent for in-situ re-edit attachments seeded from a published post's image urls. */
+  file?: File
+  originalSize?: number
   compressedSize?: number
   previewUrl: string
   uploadedUrl?: string
@@ -151,19 +152,25 @@ export const ComposeView = ({
 
   useEffect(() => {
     if (editingPost) {
-      setContent(
-        typeof editingPost.signedEvent?.content === 'string'
-          ? editingPost.signedEvent.content
-          : '',
-      )
+      const raw = typeof editingPost.signedEvent?.content === 'string'
+        ? editingPost.signedEvent.content
+        : ''
+      // Re-editing: image urls already in the content become in-situ attachments again.
+      setContent(stripImageUrls(raw))
       setSelected(editingPost.relays)
       setPublishMode('later')
       setPublishAt(defaultScheduleValue())
-      setAttachments([])
+      setAttachments(
+        extractImages(raw).map((url) => ({
+          id: String(++attachId),
+          previewUrl: url,
+          uploadedUrl: url,
+          uploading: false,
+        })),
+      )
       setTab('edit')
     }
   }, [editingPost])
-
   const addFiles = useCallback(
     async (files: File[]) => {
       const imageFiles = files.filter((f) => f.type.startsWith('image/'))
@@ -180,7 +187,7 @@ export const ComposeView = ({
 
       for (const att of newAttachments) {
         try {
-          const processed = compress ? await compressImage(att.file) : att.file
+          const processed = compress ? await compressImage(att.file!) : att.file!
           setAttachments((prev) =>
             prev.map((a) =>
               a.id === att.id ? { ...a, compressedSize: processed.size } : a,
@@ -251,7 +258,7 @@ export const ComposeView = ({
       .filter((a) => a.uploadedUrl)
       .forEach((a) => {
         const imeta = ['imeta', `url ${a.uploadedUrl}`]
-        if (a.file.type) imeta.push(`m ${a.file.type}`)
+        if (a.file?.type) imeta.push(`m ${a.file.type}`)
         tags.push(imeta)
       })
     return tags
@@ -478,7 +485,7 @@ export const ComposeView = ({
                   <Text fz={10} ff="monospace" ta="center" mt={1}
                     c={att.error ? 'red' : att.uploadedUrl ? 'green' : 'dimmed'}
                   >
-                    {att.uploading ? 'uploading...' : att.error ? 'failed' : att.uploadedUrl ? `✓ ${formatBytes(att.compressedSize ?? att.originalSize)}` : ''}
+                    {att.uploading ? 'uploading...' : att.error ? 'failed' : att.uploadedUrl ? (att.compressedSize || att.originalSize ? `✓ ${formatBytes(att.compressedSize ?? att.originalSize!)}` : '✓ attached') : ''}
                   </Text>
                   <ActionIcon variant="subtle" color="red" size="xs" pos="absolute" top={2} right={2} onClick={() => removeAttachment(att.id)}>
                     <Trash2 size={12} />

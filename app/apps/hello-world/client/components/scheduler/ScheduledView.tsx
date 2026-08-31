@@ -22,6 +22,7 @@ import {
   type ScheduledPost,
 } from '@/lib/schedulerApi'
 import { formatISO } from '@/lib/datetime'
+import { extractImages, stripImageUrls } from '@/lib/images'
 
 const relativeTime = (iso: string): string => {
   const diff = new Date(iso).getTime() - Date.now()
@@ -39,14 +40,6 @@ const relativeTime = (iso: string): string => {
 interface ScheduledViewProps {
   onEdit: (post: ScheduledPost) => void
 }
-
-const IMAGE_URL_RE = /https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?\S*)?/gi
-
-const extractImages = (content: string): string[] =>
-  content.match(IMAGE_URL_RE) ?? []
-
-const stripImageUrls = (content: string): string =>
-  content.replace(IMAGE_URL_RE, '').replace(/\n{3,}/g, '\n\n').trim()
 
 const PostCard = ({
   post,
