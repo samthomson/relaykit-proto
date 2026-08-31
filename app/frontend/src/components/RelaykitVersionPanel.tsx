@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { inferRouterOutputs } from '@trpc/server'
 import type { AppRouter } from '../../../backend/src/trpc'
 import { RubixLoader, RubixLoaderColor } from '@samthomson/rubix-loader'
-import { Badge, Button, Center, Collapse, Group, Modal, Overlay, Paper, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
+import { Badge, Button, Collapse, Group, Modal, Paper, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
 import { IconAlertCircle, IconArrowUp, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react'
 import { trpc } from '../trpc'
 
@@ -39,14 +39,19 @@ export const RelaykitVersionPanel = () => {
     }
   }, [loadCheck])
 
-  // After the update starts the old backend dies mid-recreate; poll until the new one is up AND
-  // dokploy answers, then land on home (deep links can 404 during the swap window).
-  const waitForBackend = useCallback(() => {
-    // Give compose a moment to tear the old container down before polling for the new one.
+  // After the update starts the old backend dies mid-recreate; poll until the whole stack is
+  // actually serving again — the new backend reports the target version, dokploy answers, and
+  // the frontend itself loads (traefik + frontend container are also recreated; navigating
+  // before that would show a 502) — then land on home (deep links can 404 during the swap).
+  const waitForBackend = useCallback((targetVersion: string) => {
+    // Give compose a moment to tear the old containers down before polling for the new ones.
     window.setTimeout(() => {
       pollRef.current = window.setInterval(async () => {
         try {
-          await trpc.getRelaykitVersion.query()
+          const page = await fetch(window.location.origin + '/', { cache: 'no-store' })
+          if (!page.ok) return
+          const version = await trpc.getRelaykitVersion.query()
+          if (version.version !== targetVersion) return
           const dokploy = await trpc.checkDokploy.query()
           if (dokploy.reachable) window.location.assign('/')
         } catch {
@@ -57,19 +62,18 @@ export const RelaykitVersionPanel = () => {
   }, [])
 
   const startUpdate = useCallback(async () => {
-    if (updating) return
-    // Optimistic: the overlay must appear instantly so a slow response never invites a second click.
+    if (updating || !check?.latest) return
+    // Optimistic: the updating state must appear instantly so a slow response never invites a second click.
     setUpdating(true)
-    setModalOpen(false)
     setUpdateError(null)
     try {
       await trpc.updateRelaykit.mutate()
-      waitForBackend()
+      waitForBackend(check.latest.version)
     } catch (e) {
       setUpdating(false)
       setUpdateError(e instanceof Error ? e.message : 'update failed to start')
     }
-  }, [updating, waitForBackend])
+  }, [updating, check, waitForBackend])
 
   if (!check) return null
 
@@ -97,9 +101,28 @@ export const RelaykitVersionPanel = () => {
         </Paper>
       </Tooltip>
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title="relaykit" size="md" centered>
+      <Modal
+        opened={modalOpen}
+        onClose={() => { if (!updating) setModalOpen(false) }}
+        closeOnClickOutside={!updating}
+        closeOnEscape={!updating}
+        withCloseButton={!updating}
+        title="relaykit"
+        size="md"
+        centered
+      >
         <Stack gap="md">
-          {/* current install */}
+          {updating ? (
+            <Stack align="center" gap="xs" py="lg">
+              <RubixLoader size={48} speed={0.9} colors={[RubixLoaderColor.RelayKit]} />
+              <Text size="sm" fw={500}>updating relaykit…</Text>
+              <Text size="xs" c="dimmed" ta="center">
+                updating the whole stack (relaykit + dokploy + traefik).<br />
+                this page will reconnect automatically — don't close it.
+              </Text>
+            </Stack>
+          ) : (
+          <>
           <Stack gap="xs">
             <Text size="xs" fw={600} c="dimmed" tt="uppercase">current</Text>
             <Group justify="space-between" wrap="nowrap">
@@ -176,20 +199,10 @@ export const RelaykitVersionPanel = () => {
           {updateError ? (
             <Text size="sm" c="red">{updateError}</Text>
           ) : null}
+          </>
+          )}
         </Stack>
       </Modal>
-
-      {updating ? (
-        <Overlay fixed blur={2} zIndex={200}>
-          <Center h="100%">
-            <Stack align="center" gap="xs">
-              <RubixLoader size={48} speed={0.9} colors={[RubixLoaderColor.RelayKit]} />
-              <Text size="sm" fw={500}>updating relaykit…</Text>
-              <Text size="xs" c="dimmed">this page will reconnect automatically</Text>
-            </Stack>
-          </Center>
-        </Overlay>
-      ) : null}
     </>
   )
 }
