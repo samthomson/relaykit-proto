@@ -44,18 +44,25 @@ export const RelaykitVersionPanel = () => {
   // the frontend itself loads (traefik + frontend container are also recreated; navigating
   // before that would show a 502) — then land on home (deep links can 404 during the swap).
   const waitForBackend = useCallback((targetVersion: string) => {
+    let goodPolls = 0
+    const isOurPage = (html: string) => html.includes('id="root"')
     // Give compose a moment to tear the old containers down before polling for the new ones.
     window.setTimeout(() => {
       pollRef.current = window.setInterval(async () => {
         try {
           const page = await fetch(window.location.origin + '/', { cache: 'no-store' })
-          if (!page.ok) return
+          if (!page.ok || !isOurPage(await page.text())) {
+            goodPolls = 0
+            return
+          }
+          // Require consecutive successes: traefik is also being recreated and can 404 between polls.
+          if (++goodPolls < 3) return
           const version = await trpc.getRelaykitVersion.query()
           if (version.version !== targetVersion) return
           const dokploy = await trpc.checkDokploy.query()
           if (dokploy.reachable) window.location.assign('/')
         } catch {
-          // still down (or old container mid-shutdown) — keep waiting
+          goodPolls = 0
         }
       }, 2000)
     }, 5000)
