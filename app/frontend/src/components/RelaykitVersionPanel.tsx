@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { inferRouterOutputs } from '@trpc/server'
 import type { AppRouter } from '../../../backend/src/trpc'
-import { Badge, Button, Center, Collapse, Group, Loader, Modal, Overlay, Paper, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
+import { RubixLoader, RubixLoaderColor } from '@samthomson/rubix-loader'
+import { Badge, Button, Center, Collapse, Group, Modal, Overlay, Paper, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
 import { IconAlertCircle, IconArrowUp, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react'
 import { trpc } from '../trpc'
 
@@ -97,27 +98,13 @@ export const RelaykitVersionPanel = () => {
       </Tooltip>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title="relaykit" size="md" centered>
-        <Stack gap="sm">
-          <Group justify="space-between" align="flex-start">
-            <Text size="sm" c="dimmed">current</Text>
-            <Stack gap={4} align="flex-end">
-              <Text size="sm" fw={600}>v{check.current.version}</Text>
-              {check.current.notes ? (
-                <Button variant="subtle" size="compact-xs" p={0} h="auto" onClick={() => setNotesOpen((o) => !o)}>
-                  {notesOpen ? 'hide release notes' : 'release notes'}
-                </Button>
-              ) : null}
-            </Stack>
-          </Group>
-          <Collapse in={notesOpen}>
-            <Paper withBorder p="sm">
-              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{check.current.notes}</Text>
-            </Paper>
-          </Collapse>
-          {check.updateCheckSupported ? (
-            <>
-              <Group justify="space-between">
-                <Text size="sm" c="dimmed">channel</Text>
+        <Stack gap="md">
+          {/* current install */}
+          <Stack gap="xs">
+            <Text size="xs" fw={600} c="dimmed" tt="uppercase">current</Text>
+            <Group justify="space-between" wrap="nowrap">
+              <Text size="sm">v{check.current.version}</Text>
+              {check.updateCheckSupported ? (
                 <SegmentedControl
                   size="xs"
                   disabled={channelSwitching}
@@ -135,45 +122,55 @@ export const RelaykitVersionPanel = () => {
                     })()
                   }}
                 />
-              </Group>
-              {check.updateAvailable && check.latest ? (
-                <>
-                  <Group justify="space-between">
-                    <Text size="sm" c="dimmed">available</Text>
+              ) : null}
+            </Group>
+            {check.current.notes ? (
+              <>
+                <Button variant="subtle" size="compact-xs" p={0} h="auto" style={{ width: 'fit-content' }} onClick={() => setNotesOpen((o) => !o)}>
+                  {notesOpen ? 'hide release notes' : 'release notes'}
+                </Button>
+                <Collapse in={notesOpen}>
+                  <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>{check.current.notes}</Text>
+                </Collapse>
+              </>
+            ) : null}
+          </Stack>
+
+          {/* next release, or status */}
+          {check.updateAvailable && check.latest ? (
+            <Paper withBorder p="sm">
+              <Stack gap="xs">
+                <Group justify="space-between" wrap="nowrap">
+                  <Group gap={6} wrap="nowrap">
+                    <IconArrowUp size={14} />
                     <Text size="sm" fw={600}>v{check.latest.version}</Text>
                   </Group>
-                  {check.latest.notes ? (
-                    <Paper withBorder p="sm">
-                      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{check.latest.notes}</Text>
-                    </Paper>
-                  ) : null}
-                  <Text size="xs" c="dimmed">
-                    updates the whole stack: relaykit + dokploy + traefik. your services stay online;
-                    the dashboard restarts (~a minute).
-                  </Text>
-                  <Group justify="flex-end">
-                    <Button size="sm" onClick={startUpdate}>update to v{check.latest.version}</Button>
-                  </Group>
-                </>
-              ) : check.error ? (
-                <Group justify="flex-end">
-                  <Badge size="sm" variant="light" color="orange" leftSection={<IconAlertCircle size={12} />}>
-                    couldn't check for updates
-                  </Badge>
+                  <Button size="xs" onClick={startUpdate}>update</Button>
                 </Group>
-              ) : (
-                <Group justify="flex-end">
-                  <Badge size="sm" variant="light" color="teal" leftSection={<IconCircleCheck size={12} />}>
-                    up to date
-                  </Badge>
-                </Group>
-              )}
-            </>
+                {check.latest.notes ? (
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{check.latest.notes}</Text>
+                ) : null}
+                <Text size="xs" c="dimmed">
+                  updates the whole stack: relaykit + dokploy + traefik. your services stay online;
+                  the dashboard restarts (~a minute).
+                </Text>
+              </Stack>
+            </Paper>
           ) : (
             <Group justify="flex-end">
-              <Badge size="sm" variant="light" color="gray" leftSection={<IconInfoCircle size={12} />}>
-                updates unavailable on this instance
-              </Badge>
+              {!check.updateCheckSupported ? (
+                <Badge size="sm" variant="light" color="gray" leftSection={<IconInfoCircle size={12} />}>
+                  updates unavailable on this instance
+                </Badge>
+              ) : check.error ? (
+                <Badge size="sm" variant="light" color="orange" leftSection={<IconAlertCircle size={12} />}>
+                  couldn't check for updates
+                </Badge>
+              ) : (
+                <Badge size="sm" variant="light" color="teal" leftSection={<IconCircleCheck size={12} />}>
+                  up to date
+                </Badge>
+              )}
             </Group>
           )}
           {updateError ? (
@@ -186,7 +183,7 @@ export const RelaykitVersionPanel = () => {
         <Overlay fixed blur={2} zIndex={200}>
           <Center h="100%">
             <Stack align="center" gap="xs">
-              <Loader />
+              <RubixLoader size={48} speed={0.9} colors={[RubixLoaderColor.RelayKit]} />
               <Text size="sm" fw={500}>updating relaykit…</Text>
               <Text size="xs" c="dimmed">this page will reconnect automatically</Text>
             </Stack>

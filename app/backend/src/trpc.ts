@@ -656,7 +656,8 @@ const getRuntimeContainersFromDocker = async () => {
   const presetLabelById = new Map<string, string>()
   for (const project of projects as any[]) {
     for (const environment of project.environments || []) {
-      for (const compose of environment.compose || []) {
+      for (const composeSummary of environment.compose || []) {
+        const compose = await dokployFetch(`/api/compose.one?composeId=${composeSummary.composeId}`)
         const appName = String(compose?.appName || '').trim()
         if (!appName) continue
         const presetId = String(compose?.description || '').trim() || null
@@ -928,37 +929,12 @@ export const appRouter = router({
     const services = []
     for (const project of projects) {
       for (const environment of project.environments || []) {
-        for (const compose of environment.compose || []) {
+        for (const composeSummary of environment.compose || []) {
+          // Dokploy 0.30+ project.all returns only id/name/status; the full row (description,
+          // appName, domains) comes from compose.one.
+          const compose = await dokployFetch(`/api/compose.one?composeId=${composeSummary.composeId}`)
           const presetId = compose.description
-          if (!presetId) {
-            // Legacy services deployed by old relaykit versions carry no preset id; degrade to a
-            // broken card instead of failing the whole services list.
-            services.push({
-              composeId: compose.composeId,
-              name: compose.name,
-              presetId: null,
-              serviceType: 'unknown',
-              status: 'error',
-              createdAt: compose.createdAt,
-              hostname: compose.domains?.[0]?.host || 'No hostname configured',
-              domains: compose.domains || [],
-              projectId: project.projectId,
-              projectName: project.name,
-              environmentId: environment.environmentId,
-              environmentName: environment.name,
-              type: null,
-              canEditConfig: false,
-              whitelistedPubkeys: [],
-              whitelistedKinds: [],
-              blacklistedKinds: [],
-              requireNip42: false,
-              repo: undefined,
-              icon: '⚠',
-              brokenPreset: true,
-              brokenPresetReason: 'deployed by an older relaykit, no preset id recorded',
-            })
-            continue
-          }
+          if (!presetId) throw new Error(`Service ${compose.name} has no preset ID`)
           let presetData: PresetMetadata
           try {
             presetData = await getPresetMetadata(presetId)
