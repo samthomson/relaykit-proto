@@ -465,13 +465,14 @@ export const ComposeView = ({
           {hasImages && (
             <Group gap="xs" mt="xs">
               {attachments.map((att) => (
-                <Box key={att.id} pos="relative" style={{ width: 120 }}>
+                <Box key={att.id} pos="relative" style={{ width: 'fit-content' }}>
                   <Image
                     src={att.previewUrl}
                     alt=""
                     radius={0}
-                    h={68}
-                    fit="cover"
+                    h={100}
+                    w="auto"
+                    fit="contain"
                     style={{ opacity: att.uploading ? 0.5 : 1, border: '1px solid var(--mantine-color-default-border)' }}
                   />
                   <Text fz={10} ff="monospace" ta="center" mt={1}

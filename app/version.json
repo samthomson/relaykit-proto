@@ -1,5 +1,5 @@
 {
-  "version": "0.2.1",
+  "version": "0.2.2",
   "dokployVersion": "0.30.2",
-  "notes": "fix services list with dokploy 0.30; rubix loader while updating"
+  "notes": "hello-world: image previews keep aspect ratio (uniform height, natural width)"
 }
