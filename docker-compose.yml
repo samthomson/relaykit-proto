@@ -124,6 +124,7 @@ services:
       - PORT=4000
       - JWT_SECRET=${JWT_SECRET}
       - RELAYKIT_HOST=${RELAYKIT_HOST:-}
+      - CHANGELOG_PATH=/CHANGELOG.md
     volumes:
       - ./app:/app
       # Container-private node_modules: the host (macOS) and container (Linux) need different
@@ -138,7 +139,7 @@ services:
       - dev_nm_hello_world:/app/apps/hello-world/node_modules
       - dev_nm_notif_hub:/app/apps/notif-hub/node_modules
       - relaykit_data:/app/.relaykit
-      - ./CHANGELOG.md:/app/CHANGELOG.md:ro
+      - ./CHANGELOG.md:/CHANGELOG.md:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - default
