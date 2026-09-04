@@ -126,9 +126,10 @@ const coerceConfigValueToString = (field: PresetField, value: unknown): string =
 }
 
 /**
- * Domain fields are excluded from the generic config editor: saving them there would only
- * rewrite the env var, not re-register the domain with Dokploy/Traefik. They're edited instead
- * via the per-domain pencil icon, which goes through registerDomain — see domainFieldsFor.
+ * Typed `domain` fields are excluded from the generic config editor; they're edited via the
+ * per-domain pencil icon. Plain string host fields (e.g. the relay's RELAY_HOST) remain
+ * editable there — syncServiceDomains runs on every save, so the Dokploy domain rows
+ * always follow the env.
  */
 const getEditablePresetFields = (preset: PresetMetadata): PresetField[] =>
   (preset.requiredConfig || []).filter((f) => f.type !== 'domain')
@@ -195,6 +196,16 @@ const ensureADefaultProjectExistsForServices = async (): Promise<{ projectId: st
   return { projectId: created.projectId, environmentId }
 }
 
+/** Restart Traefik so it retries ACME for hosts in config but missing from acme.json. */
+const reloadDokployTraefik = async () => {
+  const containers = await dockerSocketGetJson('/containers/json?all=0')
+  const traefik = (Array.isArray(containers) ? containers : []).find((c: any) =>
+    String(c?.Names?.[0] || '').includes('dokploy-traefik-prod'),
+  )
+  if (!traefik?.Id) throw new Error('dokploy-traefik-prod container not found')
+  await dockerSocketMutate(`/containers/${traefik.Id}/restart`, 'POST')
+}
+
 const registerDomain = async (composeId: string, host: string, presetData: { internalPort: number; serviceName?: string }) => {
   const certificateType = getCertificateType()
   const domainPayload = {
@@ -222,33 +233,45 @@ const registerDomain = async (composeId: string, host: string, presetData: { int
   }
 }
 
+type DokployDomainRow = { domainId: string; host: string; certificateType?: string }
+
 /**
- * Traefik needs a router (and cert) only for the public host. In vanity mode that's the visitor host; in
- * multi-site mode the router host already IS the canonical host. The canonical host is otherwise internal
- * addressing (Caddy rewrites the Host container-to-container), so we don't register it as a public domain —
- * and this reconciler removes any canonical domain left over from older vanity deployments.
+ * Reconcile Dokploy domain rows with the hosts the service is configured for (domainFieldsFor —
+ * env is the source of truth): delete rows whose host is gone or whose certificate type is stale
+ * (rows created without TLS never heal by redeploying — Traefik only requests a cert when the
+ * router carries the letsencrypt resolver), and register any configured host that's missing.
+ * Runs on deploy, config save, and domain edits so routing/TLS can't drift from the config.
+ * Takes the caller's current rows (each call site has already fetched the compose) — deletions
+ * are awaited, so the surviving rows are known without a refetch.
  */
-const syncNsiteDokployDomains = async (composeId: string, envVars: Record<string, string>, presetData: PresetMetadata) => {
-  const router = (envVars.NSITE_ROUTER_HOST || envVars.NSITE_DOMAIN || '').trim()
-  const targets = new Set<string>()
-  if (router) targets.add(router)
-  if (targets.size === 0) return
-
-  const compose = await dokployFetch(`/api/compose.one?composeId=${composeId}`)
-  let domains = (compose.domains || []) as { domainId: string; host: string }[]
-  for (const dom of domains) {
-    if (targets.has(dom.host)) continue
-    await dokployFetch('/api/domain.delete', {
-      method: 'POST',
-      body: JSON.stringify({ domainId: dom.domainId }),
-    })
+const syncServiceDomains = async (
+  composeId: string,
+  preset: PresetMetadata,
+  envVars: Record<string, string>,
+  currentDomains: DokployDomainRow[],
+) => {
+  const wanted = new Map<string, DomainField>()
+  for (const field of domainFieldsFor(preset, envVars)) {
+    const host = String(field.host || '').trim().toLowerCase()
+    if (host && field.serviceName) wanted.set(host, field)
   }
+  if (wanted.size === 0) return
 
-  const composeAfter = await dokployFetch(`/api/compose.one?composeId=${composeId}`)
-  domains = (composeAfter.domains || []) as { domainId: string; host: string }[]
-  const existing = new Set(domains.map((d) => d.host))
-  for (const host of targets) {
-    if (!existing.has(host)) await registerDomain(composeId, host, presetData)
+  const certificateType = getCertificateType()
+  const existing = new Set<string>()
+  for (const dom of currentDomains) {
+    const host = String(dom.host || '').trim().toLowerCase()
+    if (wanted.has(host) && (dom.certificateType ?? 'none') === certificateType) {
+      existing.add(host)
+    } else {
+      await dokployFetch('/api/domain.delete', {
+        method: 'POST',
+        body: JSON.stringify({ domainId: dom.domainId }),
+      })
+    }
+  }
+  for (const [host, field] of wanted) {
+    if (!existing.has(host)) await registerDomain(composeId, host, field)
   }
 }
 
@@ -1096,7 +1119,7 @@ export const appRouter = router({
 
       // For npanel the editable domain IS the public visitor host. Persist it into env so
       // a later config save doesn't recompute the router host back to the long NIP-5A host.
-      // Domain reconciliation (delete old / add canonical) is handled by syncNsiteDokployDomains.
+      // Domain reconciliation (delete old / add canonical) is handled by syncServiceDomains.
       if (isNpanelType(presetData.id)) {
         let envVars = parseServiceEnvVarsString(compose.env)
         envVars.NSITE_VISITOR_HOST = normalizeVisitorHost(input.newHost)
@@ -1106,7 +1129,7 @@ export const appRouter = router({
           method: 'POST',
           body: JSON.stringify({ composeId: input.composeId, env: stringifyEnvVars(envVars), sourceType: 'raw' }),
         })
-        await syncNsiteDokployDomains(input.composeId, envVars, presetData)
+        await syncServiceDomains(input.composeId, presetData, envVars, compose.domains ?? [])
         await dokployFetch('/api/compose.redeploy', {
           method: 'POST',
           body: JSON.stringify({ composeId: input.composeId }),
@@ -1127,23 +1150,33 @@ export const appRouter = router({
         serviceName: presetData.serviceName,
       }
 
-      envVars[field.configKey] = input.newHost
-      await dokployFetch('/api/compose.update', {
-        method: 'POST',
-        body: JSON.stringify({ composeId: input.composeId, env: stringifyEnvVars(envVars), sourceType: 'raw' }),
-      })
-
-      // Dokploy has no domain.update; change domain = delete old then create new
-      await dokployFetch('/api/domain.delete', {
-        method: 'POST',
-        body: JSON.stringify({ domainId: input.domainId })
-      })
-      await registerDomain(input.composeId, input.newHost, field)
-      await dokployFetch('/api/compose.redeploy', {
-        method: 'POST',
-        body: JSON.stringify({ composeId: input.composeId })
-      })
-      return { success: true, message: 'Domain updated and service redeployed' }
+      const hostUnchanged = oldHost === input.newHost
+      if (!hostUnchanged) {
+        envVars[field.configKey] = input.newHost
+        await dokployFetch('/api/compose.update', {
+          method: 'POST',
+          body: JSON.stringify({ composeId: input.composeId, env: stringifyEnvVars(envVars), sourceType: 'raw' }),
+        })
+        await dokployFetch('/api/domain.delete', {
+          method: 'POST',
+          body: JSON.stringify({ domainId: input.domainId })
+        })
+        await registerDomain(input.composeId, input.newHost, field)
+        await dokployFetch('/api/compose.redeploy', {
+          method: 'POST',
+          body: JSON.stringify({ composeId: input.composeId })
+        })
+      }
+      // Same-host edit = "retry TLS": reconcile the row (a stale certificate type is why
+      // redeploying never heals it), then restart Traefik to re-attempt ACME.
+      if (hostUnchanged) {
+        await syncServiceDomains(input.composeId, presetData, envVars, compose.domains ?? [])
+      }
+      await reloadDokployTraefik()
+      return {
+        success: true,
+        message: hostUnchanged ? 'Retrying TLS certificate' : 'Domain updated and service redeployed',
+      }
     }),
 
   // Refresh nsite content without touching env/domains. The gateway holds fetched Nostr events
@@ -1228,9 +1261,7 @@ export const appRouter = router({
         envVars = finalizeNsiteRouterEnv(envVars)
         envVars[NPANEL_NIP05_USERS_ENV_KEY] = normalizeNpanelNip05UsersEnv(envVars[NPANEL_NIP05_USERS_ENV_KEY] ?? '')
       }
-      if (isNpanelType(preset.id)) {
-        await syncNsiteDokployDomains(input.composeId, envVars, preset)
-      }
+      await syncServiceDomains(input.composeId, preset, envVars, compose.domains ?? [])
 
       const env = stringifyEnvVars(envVars)
       // Re-push the current preset compose so redeploys pick up compose fixes (image/caddy changes) without
@@ -1559,24 +1590,12 @@ export const appRouter = router({
           body: JSON.stringify({ composeId: createCompose.composeId, env: envString, sourceType: 'raw' })
         })
 
+        // Register routing + TLS for every configured public host (router host in multi-site
+        // mode, visitor host in vanity mode; the canonical host is internal addressing — Caddy
+        // rewrites the Host container-to-container — so it's never registered). A fresh
+        // compose has no rows yet, so this just creates them.
         const presetData = await getPresetMetadata(input.presetId)
-        const domainKey = presetData.domainConfigKey ?? 'RELAY_HOST'
-        // Only the router host needs a public domain. In vanity mode that's the visitor host; in multi-site mode
-        // the router host already IS the canonical host. The canonical host is internal addressing otherwise
-        // (Caddy rewrites the Host container-to-container), so we don't register it separately.
-        const hostname = configForDeploy[domainKey] || configForDeploy.NSITE_DOMAIN
-        if (hostname && presetData.serviceName) {
-          await registerDomain(createCompose.composeId, hostname, presetData)
-        }
-        for (const extra of presetData.extraDomains ?? []) {
-          const extraHost = configForDeploy[extra.configKey]
-          if (extraHost) {
-            await registerDomain(createCompose.composeId, extraHost, {
-              internalPort: extra.internalPort,
-              serviceName: extra.serviceName,
-            })
-          }
-        }
+        await syncServiceDomains(createCompose.composeId, presetData, configForDeploy, [])
 
         await dokployFetch('/api/compose.deploy', {
           method: 'POST',

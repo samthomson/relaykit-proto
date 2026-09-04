@@ -1,5 +1,9 @@
 # changelog
 
+
+## 0.3.1 — 2026-09-04
+fix: services could silently lose ssl (traefik default cert, never healed on redeploy). domain rows now reconcile with configured hosts on every deploy, config save and domain edit
+
 ## 0.3.0 — 2026-09-01
 insights: warn/critical results now show a top-level banner; changelog fixes
 
