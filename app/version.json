@@ -1,5 +1,5 @@
 {
-  "version": "0.3.1",
+  "version": "0.3.2",
   "dokployVersion": "0.30.2",
-  "notes": "fix: services could silently lose ssl (traefik default cert, never healed on redeploy). domain rows now reconcile with configured hosts on every deploy, config save and domain edit — stale hosts or missing letsencrypt are deleted and re-registered."
+  "notes": "routing health tooling: debug page shows ghost routers (stale traefik labels on running containers) with one-click hard reset, plus a dns check across all domains (flags unresolvable, dotless, cloudflare-proxied hosts). invalid hostnames are rejected at deploy/save. the tls retry now waits for the proxy restart behind a reconnect modal instead of hanging the dashboard."
 }

@@ -5,6 +5,17 @@ import { useAuth } from '../contexts/AuthContext'
 import { getIdentityKeys } from '../lib/identityKeys'
 import { trpc } from '../trpc'
 
+type RoutingHealthHost = {
+  host: string
+  services: string[]
+  dotless: boolean
+  resolvable: boolean
+  cloudflareProxied: boolean
+  ips: string[]
+}
+type RoutingHealth = { checkedAt: number; hosts: RoutingHealthHost[]; unhealthy: RoutingHealthHost[] }
+
+
 export const DebugPage = () => {
   const { npub, token } = useAuth()
   const { hex, npub: encodedNpub } = getIdentityKeys(npub)
@@ -14,6 +25,8 @@ export const DebugPage = () => {
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [expandedServiceIds, setExpandedServiceIds] = useState<string[]>([])
+  const [routingHealth, setRoutingHealth] = useState<RoutingHealth | null>(null)
+  const [healthLoading, setHealthLoading] = useState(false)
 
   const loadRuntime = async () => {
     try {
@@ -101,6 +114,19 @@ export const DebugPage = () => {
       setBusyKey(null)
     }
   }
+  const ghostRouters = useMemo(() => {
+    if (!runtime) return []
+    return runtime.containers
+      .filter((container: any) => (container.staleRoutingHosts || []).length > 0)
+      .flatMap((container: any) =>
+        container.staleRoutingHosts.map((host: string) => ({
+          host,
+          containerName: container.name as string,
+          composeId: container.composeId as string | null,
+          composeName: container.composeName as string | null,
+        }))
+      )
+  }, [runtime])
 
   const handleHardReset = async (composeId: string, composeName: string) => {
     if (!window.confirm(`hard reset service ${composeName}? this will remove runtime containers and redeploy.`)) return
@@ -110,6 +136,15 @@ export const DebugPage = () => {
       await loadRuntime()
     } finally {
       setBusyKey(null)
+    }
+  }
+
+  const handleCheckRouting = async () => {
+    setHealthLoading(true)
+    try {
+      setRoutingHealth(await trpc.checkRoutingHealth.query())
+    } finally {
+      setHealthLoading(false)
     }
   }
 
@@ -174,8 +209,10 @@ export const DebugPage = () => {
               <Badge variant="light" color="gray">total {runtime.summary.total}</Badge>
               <Badge variant="light" color="green">managed {runtime.summary.managed}</Badge>
               <Badge variant="light" color="red">orphaned {runtime.summary.orphaned}</Badge>
+              {runtime.summary.ghostRouters > 0 ? (
+                <Badge variant="light" color="orange">ghost routers {runtime.summary.ghostRouters}</Badge>
+              ) : null}
               <Badge variant="light" color="blue">running {runtime.summary.running}</Badge>
-              <Badge variant="light" color="grape">volumes {runtime.summary.volumes}</Badge>
             </Group>
           ) : null}
 
@@ -375,6 +412,94 @@ export const DebugPage = () => {
               ))}
             </Table.Tbody>
           </Table>
+        </Stack>
+      </Paper>
+
+      <Paper withBorder p="md">
+        <Stack gap="md">
+          <Group justify="space-between" align="center">
+            <Text fw={500}>routing health</Text>
+            <Button size="xs" variant="light" loading={healthLoading} onClick={() => void handleCheckRouting()}>
+              check dns
+            </Button>
+          </Group>
+          <Text size="xs" c="dimmed">
+            ghost routers are hosts still advertised by a running container's traefik labels but no longer in its domain config — they retry certificate issuance forever. fix by redeploying (or hard reset) the service. unresolvable or dotless hosts can never route or issue a cert.
+          </Text>
+
+          {ghostRouters.length > 0 ? (
+            <Stack gap="xs">
+              <Text size="sm" fw={500} c="orange">ghost routers</Text>
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>host</Table.Th>
+                    <Table.Th>service</Table.Th>
+                    <Table.Th>container</Table.Th>
+                    <Table.Th></Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {ghostRouters.map((ghost) => (
+                    <Table.Tr key={`${ghost.containerName}:${ghost.host}`}>
+                      <Table.Td><Text size="sm" ff="monospace">{ghost.host}</Text></Table.Td>
+                      <Table.Td>{ghost.composeName || '—'}</Table.Td>
+                      <Table.Td><Text size="xs" ff="monospace" c="dimmed">{ghost.containerName}</Text></Table.Td>
+                      <Table.Td>
+                        {ghost.composeId ? (
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="orange"
+                            loading={busyKey === `reset:${ghost.composeId}`}
+                            onClick={() => ghost.composeName && void handleHardReset(ghost.composeId, ghost.composeName)}
+                          >
+                            hard reset
+                          </Button>
+                        ) : null}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Stack>
+          ) : null}
+
+          {routingHealth ? (
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>
+                dns check — {routingHealth.hosts.length} hosts, {routingHealth.unhealthy.length} flagged
+              </Text>
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>host</Table.Th>
+                    <Table.Th>services</Table.Th>
+                    <Table.Th>status</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {routingHealth.hosts.map((h) => (
+                    <Table.Tr key={h.host} bg={routingHealth.unhealthy.some((u) => u.host === h.host) ? 'var(--mantine-color-warning-light)' : undefined}>
+                      <Table.Td><Text size="sm" ff="monospace">{h.host}</Text></Table.Td>
+                      <Table.Td><Text size="xs">{h.services.join(', ')}</Text></Table.Td>
+                      <Table.Td>
+                        {h.dotless ? (
+                          <Badge variant="light" color="red">dotless</Badge>
+                        ) : !h.resolvable ? (
+                          <Badge variant="light" color="red">no dns record</Badge>
+                        ) : h.cloudflareProxied ? (
+                          <Badge variant="light" color="orange">cf proxied</Badge>
+                        ) : (
+                          <Badge variant="light" color="green">ok</Badge>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Stack>
+          ) : null}
         </Stack>
       </Paper>
     </Stack>

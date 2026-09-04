@@ -1005,6 +1005,7 @@ export const ServiceList = () => {
 
   const [editingDomain, setEditingDomain] = useState<{ composeId: string; domainId: string; currentHost: string } | null>(null);
   const [newDomainHost, setNewDomainHost] = useState('');
+  const [tlsRestarting, setTlsRestarting] = useState(false);
 
   const [newProjectName, setNewProjectName] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
@@ -1212,18 +1213,51 @@ export const ServiceList = () => {
   const handleSaveDomain = async () => {
     if (!editingDomain) return;
     try {
-      await trpc.updateServiceDomain.mutate({
+      const result = await trpc.updateServiceDomain.mutate({
         composeId: editingDomain.composeId,
         domainId: editingDomain.domainId,
         newHost: newDomainHost
       });
       setEditingDomain(null);
+      // The retry path restarts Traefik shortly after responding; the dashboard rides the same
+      // proxy, so block behind a modal until the proxy is back instead of showing error toasts.
+      if (result?.message === 'Retrying TLS certificate') {
+        setTlsRestarting(true);
+        return;
+      }
       await loadData();
       toast.success('Domain updated successfully');
     } catch (error: any) {
       toast.error(`Failed to update domain: ${error.message}`);
     }
   };
+
+  // While the edge proxy restarts (tls retry), every request through it fails. Poll until it
+    // answers consistently again, then refresh — same shape as the updater's waitForBackend.
+  useEffect(() => {
+    if (!tlsRestarting) return;
+    let goodPolls = 0;
+    const timer = setInterval(async () => {
+      try {
+        const status = await trpc.checkDokploy.query();
+        if (status.reachable) {
+          goodPolls += 1;
+        } else {
+          goodPolls = 0;
+        }
+      } catch {
+        goodPolls = 0;
+      }
+      if (goodPolls >= 3) {
+        clearInterval(timer);
+        setTlsRestarting(false);
+        await loadData();
+        toast.success('edge proxy back — certificate retry issued');
+      }
+    }, 1500);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tlsRestarting]);
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -1695,6 +1729,25 @@ export const ServiceList = () => {
           onCancel={() => setConfirmModal(null)}
         />
       )}
+
+      <Modal
+        opened={tlsRestarting}
+        onClose={() => {}}
+        withCloseButton={false}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        centered
+        title="restarting edge proxy"
+      >
+        <Stack align="center" gap="sm" py="sm">
+          <RubixLoader size={96} colors={[RubixLoaderColor.RelayKit]} speed={1.35} />
+          <Text size="sm" c="dimmed" ta="center">
+            retrying the tls certificate — the proxy (and this dashboard) restarts for a few seconds.
+            <br />
+            this page reconnects automatically — don't close it.
+          </Text>
+        </Stack>
+      </Modal>
     </Stack>
   );
 };

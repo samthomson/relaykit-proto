@@ -163,6 +163,11 @@ const domainFieldsFor = (preset: PresetMetadata, envVars: Record<string, string>
   return fields
 }
 
+// Public host sanity: dotless ("relay2") or malformed hosts can never get DNS or a cert, and
+// poison Traefik with routers that retry Let's Encrypt forever.
+const isValidPublicHost = (value: string): boolean =>
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(value.trim())
+
 const getPresetMetadata = async (presetId: string) => {
   const metadata = await fs.readFile(path.join(PRESETS_DIR, presetId, 'metadata.json'), 'utf-8')
   return JSON.parse(metadata) as PresetMetadata
@@ -207,6 +212,9 @@ const reloadDokployTraefik = async () => {
 }
 
 const registerDomain = async (composeId: string, host: string, presetData: { internalPort: number; serviceName?: string }) => {
+  if (!isValidPublicHost(host)) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: `"${host}" is not a valid public domain — use a full hostname like relay.example.com.` })
+  }
   const certificateType = getCertificateType()
   const domainPayload = {
     composeId,
@@ -719,6 +727,16 @@ const getRuntimeContainersFromDocker = async () => {
     const hasComposeLabel = !!composeProject
     const isManaged = !!compose
     const isOrphan = hasComposeLabel && !compose
+    // Hosts baked into this container's traefik router labels. Dokploy stamps these at deploy
+    // time from the domain rows; if the rows changed since without recreating the container,
+    // the old routers linger and keep retrying certs for hosts nobody owns ("ghost routers").
+    const traefikHosts = Object.entries(labels as Record<string, string>)
+      .filter(([key]) => /^traefik\.http\.routers\.[^.]+\.rule$/.test(key))
+      .flatMap(([, rule]) => Array.from(String(rule).matchAll(/Host\(`([^`]+)`\)/g), (m) => m[1].toLowerCase()))
+    const currentDomainHosts = new Set(
+      ((compose?.domains || []) as { host: string }[]).map((d) => String(d.host || '').toLowerCase()),
+    )
+    const staleRoutingHosts = isManaged ? traefikHosts.filter((h) => !currentDomainHosts.has(h)) : []
     const mounts = Array.isArray(container?.Mounts)
       ? container.Mounts.map((mount: any) => ({
           type: String(mount?.Type || '').toLowerCase(),
@@ -747,6 +765,8 @@ const getRuntimeContainersFromDocker = async () => {
       presetId: compose?.presetId || null,
       presetLabel: compose?.presetLabel || null,
       domainHost: compose?.domains?.[0]?.host || null,
+      traefikHosts,
+      staleRoutingHosts,
       mounts,
     }
   })
@@ -812,6 +832,7 @@ const getRuntimeContainersFromDocker = async () => {
       orphaned: items.filter((c) => c.isOrphan).length,
       running: items.filter((c) => c.state === 'running').length,
       volumes: volumes.length,
+      ghostRouters: items.reduce((n, c) => n + c.staleRoutingHosts.length, 0),
     },
   }
 }
@@ -830,6 +851,27 @@ const inCidr = (ip: string, cidr: string) => {
   return (ipToInt(ip) & mask) === (ipToInt(base) & mask)
 }
 const isCloudflareIp = (ip: string) => CF_RANGES_V4.some((r) => inCidr(ip, r))
+
+const resolveHostIps = async (host: string): Promise<string[]> => {
+  const resolve4 = async (servers: string[]) => {
+    const r = new dns.Resolver()
+    r.setServers(servers)
+    return r.resolve4(host)
+  }
+  try {
+    // Quad9: non-profit, Swiss-based, no logging or data selling
+    return await resolve4(['9.9.9.9', '149.112.112.112'])
+  } catch {
+    try {
+      // hdns.io: public Handshake (HNS) resolver — handles decentralized TLDs unknown to ICANN
+      return await resolve4(['103.196.38.38'])
+    } catch {
+      // Fall back to system resolver so /etc/hosts entries work in dev
+      const addrs = await dns.lookup(host, { family: 4, all: true })
+      return addrs.map((a) => a.address)
+    }
+  }
+}
 
 export const appRouter = router({
   listPresets: publicProcedure
@@ -1167,12 +1209,17 @@ export const appRouter = router({
           body: JSON.stringify({ composeId: input.composeId })
         })
       }
-      // Same-host edit = "retry TLS": reconcile the row (a stale certificate type is why
-      // redeploying never heals it), then restart Traefik to re-attempt ACME.
+      // Same-host edit = "retry TLS": reconcile the row, then restart Traefik so it re-attempts
+      // ACME (it doesn't retry failed domains on its own). The dashboard itself is routed
+      // through Traefik, so the restart must not race this response out — delay it instead.
+      // A changed host doesn't need it: Dokploy's domain write hot-reloads Traefik config,
+      // and the new router requests its cert on load.
       if (hostUnchanged) {
         await syncServiceDomains(input.composeId, presetData, envVars, compose.domains ?? [])
+        setTimeout(() => {
+          reloadDokployTraefik().catch((err) => console.error('traefik restart failed:', err))
+        }, 2000)
       }
-      await reloadDokployTraefik()
       return {
         success: true,
         message: hostUnchanged ? 'Retrying TLS certificate' : 'Domain updated and service redeployed',
@@ -1458,30 +1505,62 @@ export const appRouter = router({
     .input(z.object({ host: z.string().min(1), expectedIp: z.string().min(1) }))
     .query(async ({ input }) => {
       try {
-        const resolve4 = async (host: string, servers: string[]) => {
-          const r = new dns.Resolver()
-          r.setServers(servers)
-          return r.resolve4(host)
-        }
-        let ips: string[]
-        try {
-          // Quad9: non-profit, Swiss-based, no logging or data selling
-          ips = await resolve4(input.host, ['9.9.9.9', '149.112.112.112'])
-        } catch {
-          try {
-            // hdns.io: public Handshake (HNS) resolver — handles decentralized TLDs unknown to ICANN
-            ips = await resolve4(input.host, ['103.196.38.38'])
-          } catch {
-            // Fall back to system resolver so /etc/hosts entries work in dev
-            const addrs = await dns.lookup(input.host, { family: 4, all: true })
-            ips = addrs.map((a) => a.address)
-          }
-        }
+        const ips = await resolveHostIps(input.host)
         if (ips.includes(input.expectedIp)) return { ok: true, ips }
         if (ips.length > 0 && ips.every(isCloudflareIp)) return { ok: false, proxied: 'cloudflare' as const, ips }
         return { ok: false, ips }
       } catch (e: any) {
         return { ok: false, error: e?.message }
+      }
+    }),
+
+  // Resolve every domain host across all services and flag ones that can never route/issue:
+  // unresolvable (NXDOMAIN / no record) or dotless. DNS points somewhere but Cloudflare-proxied
+  // hosts are fine for routing but break HTTP-01 issuance — flagged separately.
+  checkRoutingHealth: protectedProcedure
+    .input(z.void())
+    .query(async () => {
+      const projects = (await dokployFetch('/api/project.all')) as any[]
+      const servicesByHost = new Map<string, string[]>()
+      for (const project of projects) {
+        for (const environment of project.environments || []) {
+          for (const composeSummary of environment.compose || []) {
+            const compose = await dokployFetch(`/api/compose.one?composeId=${composeSummary.composeId}`)
+            for (const dom of (compose.domains || []) as { host: string }[]) {
+              const host = String(dom.host || '').toLowerCase().trim()
+              if (!host) continue
+              const list = servicesByHost.get(host) || []
+              list.push(String(compose.name || composeSummary.name || compose.composeId))
+              servicesByHost.set(host, list)
+            }
+          }
+        }
+      }
+
+      const hosts = await Promise.all(
+        Array.from(servicesByHost.keys()).map(async (host) => {
+          const dotless = !host.includes('.')
+          let ips: string[] = []
+          try {
+            ips = dotless ? [] : await resolveHostIps(host)
+          } catch {
+            ips = []
+          }
+          const cloudflareProxied = ips.length > 0 && ips.every(isCloudflareIp)
+          return {
+            host,
+            services: servicesByHost.get(host) || [],
+            dotless,
+            resolvable: ips.length > 0,
+            cloudflareProxied,
+            ips,
+          }
+        })
+      )
+      return {
+        checkedAt: Date.now(),
+        hosts,
+        unhealthy: hosts.filter((h) => h.dotless || !h.resolvable || h.cloudflareProxied),
       }
     }),
 

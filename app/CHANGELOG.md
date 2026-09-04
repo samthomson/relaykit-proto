@@ -1,5 +1,7 @@
 # changelog
 
+## 0.3.2 — 2026-09-04
+routing health tooling: ghost router detection + dns check on the debug page, invalid hostnames rejected at deploy/save, tls retry behind a reconnect modal (no more dashboard hang)
 
 ## 0.3.1 — 2026-09-04
 fix: services could silently lose ssl (traefik default cert, never healed on redeploy). domain rows now reconcile with configured hosts on every deploy, config save and domain edit
