@@ -56,7 +56,7 @@
       "name": "Event / manifest relays",
       "type": "string",
       "required": false,
-      "description": "Comma-separated wss:// URLs for loading events and manifest sync (defaults are fine for most setups).",
+      "description": "Comma-separated wss:// URLs used to load events and sync manifests. 2-5 is plenty: the relays you publish your manifest to plus 1-2 ecosystem defaults (nsite.run, purplepag.es). More relays = slower scans on every gateway cold start.",
       "placeholder": "wss://…"
     },
     {
@@ -64,7 +64,7 @@
       "name": "Discovery relays",
       "type": "string",
       "required": false,
-      "description": "Comma-separated wss:// URLs to find routing and Blossom hints for a pubkey.",
+      "description": "Comma-separated wss:// URLs used to find routing and Blossom hints for a pubkey. Profile-hint relays like purplepag.es cover most cases; 1-3 is enough.",
       "placeholder": "wss://…"
     },
     {

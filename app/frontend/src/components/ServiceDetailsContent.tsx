@@ -599,7 +599,7 @@ const ServiceDetailsInsights = ({
     void load();
     const poll = window.setInterval(() => {
       void load();
-    }, 5000);
+    }, 30000);
     return () => {
       mounted = false;
       window.clearInterval(poll);

@@ -214,6 +214,7 @@ const Index = () => {
     isFetching,
   } = useQuery({
     queryKey: ['nsite-manifests', pubkey, activeRelays],
+    retry: 1,
     enabled: !!pubkey,
     queryFn: async (): Promise<SiteData[]> => {
       const pool = new SimplePool();
@@ -222,7 +223,7 @@ const Index = () => {
           kinds: [15128, 35128],
           authors: [pubkey!],
           limit: 200,
-        });
+        }, { maxWait: 8000 });
         // Deduplicate replaceable events, keeping the newest per (kind,d).
         const newest = new Map<string, NostrEvent>();
         for (const e of events) {
@@ -246,7 +247,7 @@ const Index = () => {
     queryFn: async (): Promise<string[]> => {
       const pool = new SimplePool();
       try {
-        const events = await pool.querySync(activeRelays, { kinds: [10063], authors: [pubkey!], limit: 1 });
+        const events = await pool.querySync(activeRelays, { kinds: [10063], authors: [pubkey!], limit: 1 }, { maxWait: 8000 });
         return events[0]?.tags.filter((t) => t[0] === 'server' && t[1]).map((t) => t[1]) ?? [];
       } finally {
         pool.close(activeRelays);
@@ -264,7 +265,7 @@ const Index = () => {
       try {
         const filter: Record<string, unknown> = { kinds: [15128, 35128], limit: 100 };
         if (activeAuthors.length) filter.authors = activeAuthors;
-        const events = await pool.querySync(activeRelays, filter as never);
+        const events = await pool.querySync(activeRelays, filter as never, { maxWait: 8000 });
         const newest = new Map<string, NostrEvent>();
         for (const e of events) {
           const d = e.tags.find((t) => t[0] === 'd')?.[1] ?? '';

@@ -1140,7 +1140,7 @@ export const ServiceList = () => {
     void loadSummaries();
     const poll = window.setInterval(() => {
       void loadSummaries();
-    }, 7000);
+    }, 60000);
     return () => {
       mounted = false;
       window.clearInterval(poll);

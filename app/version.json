@@ -1,5 +1,5 @@
 {
-  "version": "0.3.2",
+  "version": "0.3.3",
   "dokployVersion": "0.30.2",
-  "notes": "routing health tooling: debug page shows ghost routers (stale traefik labels on running containers) with one-click hard reset, plus a dns check across all domains (flags unresolvable, dotless, cloudflare-proxied hosts). invalid hostnames are rejected at deploy/save. the tls retry now waits for the proxy restart behind a reconnect modal instead of hanging the dashboard."
+  "notes": "performance + npanel app fixes: insights polling backed off (60s overview, 30s details) with cached app names and no per-poll disk-size walks — the dashboard no longer hammers the box. the npanel app's relay queries are bounded (8s max wait, single retry), so slow or unreachable relays can't stretch opening a site into minutes. nsite relay fields now guide toward lean lists."
 }

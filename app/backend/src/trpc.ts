@@ -478,7 +478,15 @@ const getRunningComposeProjects = async (): Promise<Set<string> | null> => {
   }
 }
 
+// appName (e.g. nostr-rs-relay-iot2ij) is stable for a compose's lifetime — it only changes on
+// delete + redeploy, which allocates a new composeId anyway. Insights/logs poll every 15-30s per
+// open dashboard, and resolving it costs a Dokploy HTTP round-trip per service — cache it.
+const composeAppNameCache = new Map<string, { appName: string; at: number }>()
+const COMPOSE_APP_NAME_TTL_MS = 10 * 60 * 1000
+
 const loadComposeAppName = async (composeId: string): Promise<string> => {
+  const cached = composeAppNameCache.get(composeId)
+  if (cached && Date.now() - cached.at < COMPOSE_APP_NAME_TTL_MS) return cached.appName
   const compose = await dokployFetch(`/api/compose.one?composeId=${composeId}`)
   const appName = String(compose?.appName || '').trim()
   if (!appName) {
@@ -487,6 +495,7 @@ const loadComposeAppName = async (composeId: string): Promise<string> => {
       message: 'Could not resolve runtime app name for this service.',
     })
   }
+  composeAppNameCache.set(composeId, { appName, at: Date.now() })
   return appName
 }
 
@@ -520,7 +529,13 @@ const renderPresetComposeForUpdate = async (
   return template.replace(/\{\{DEPLOY_SUFFIX\}\}/g, suffix)
 }
 
-const getServiceInsightsFromDokploy = async (composeId: string): Promise<ServiceInsightsResponse> => {
+// includeSize=false skips Docker's per-container disk usage computation (size=1 walks the
+// filesystem layers — expensive). The overview batch polls for many services and doesn't show
+// storage; the details view (one service, less often) keeps it.
+const getServiceInsightsFromDokploy = async (
+  composeId: string,
+  includeSize = true,
+): Promise<ServiceInsightsResponse> => {
   try {
     await fs.access(DOCKER_SOCKET_PATH)
   } catch {
@@ -532,7 +547,7 @@ const getServiceInsightsFromDokploy = async (composeId: string): Promise<Service
 
   const appName = await loadComposeAppName(composeId)
   const filters = encodeURIComponent(JSON.stringify({ label: [`com.docker.compose.project=${appName}`] }))
-  const containers = await dockerSocketGetJson(`/containers/json?all=0&size=1&filters=${filters}`)
+  const containers = await dockerSocketGetJson(`/containers/json?all=0&size=${includeSize ? 1 : 0}&filters=${filters}`)
 
   if (!Array.isArray(containers) || containers.length === 0) {
     throw new TRPCError({
@@ -568,7 +583,7 @@ const getServiceInsightsFromDokploy = async (composeId: string): Promise<Service
     const io = getBlockIoTotals(stats)
     blockReadBytes += io.readBytes
     blockWriteBytes += io.writeBytes
-    storageUsedBytes += toFiniteNumber(container?.SizeRw)
+    if (includeSize) storageUsedBytes += toFiniteNumber(container?.SizeRw)
   }
 
   const ts = Date.now()
@@ -1492,7 +1507,7 @@ export const appRouter = router({
       await Promise.all(
         input.composeIds.map(async (composeId) => {
           try {
-            out[composeId] = await getServiceInsightsFromDokploy(composeId)
+            out[composeId] = await getServiceInsightsFromDokploy(composeId, false)
           } catch {
             out[composeId] = null
           }
